@@ -21,6 +21,7 @@ int main(int argc, char** argv)
 
     runtime.initialize(app);
     app.run(runtime);
+    runtime.shutdown();
 
     std::cout << "\nCorium SimLab exited successfully.\n";
     return 0;

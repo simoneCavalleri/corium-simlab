@@ -1,6 +1,13 @@
 #pragma once
 
 #include <cstdint>
+#include "corium_sim/math/Math.hpp"
+#include "corium_sim/renderer/Camera.hpp"
+#include "corium_sim/renderer/Mesh.hpp"
+#include "corium_sim/renderer/Texture.hpp"
+#include "corium_sim/renderer/Uniforms.hpp"
+
+#include <vector>
 
 #if __has_include(<webgpu/webgpu.h>)
 #include <webgpu/webgpu.h>
@@ -14,15 +21,8 @@ struct GLFWwindow;
 
 namespace corium_sim::renderer {
 
-/// @brief Vertex structure for WebGPU pipeline (Position + Color)
-struct alignas(16) Vertex {
-    float position[3];
-    float color[3];
-};
-
-/// @brief WebGPU Rendering Backend implementing native WebGPU pipeline lifecycle.
-/// Manages WGPUInstance, WGPUAdapter, WGPUDevice, WGPUQueue, WGPUSurface, and WGPURenderPipeline.
-/// Zero dynamic memory allocation during render pass execution.
+/// @brief WebGPU 3D Rendering Engine Backend.
+/// Manages WebGPU Swapchain, Depth Buffer, WGSL Shaders, Pipeline Layout, BindGroups, and Render Pass.
 class WebGpuBackend {
 public:
     WebGpuBackend();
@@ -34,16 +34,25 @@ public:
     WebGpuBackend(WebGpuBackend&& rhs) noexcept;
     WebGpuBackend& operator=(WebGpuBackend&& rhs) noexcept;
 
-    /// @brief Initialize WebGPU context, Surface, Adapter, Device, Queue, and WGSL Render Pipeline.
+    /// @brief Initialize WebGPU context, Depth Buffer, Pipeline, Default Textures, and WGSL Shaders.
     bool initialize(GLFWwindow* windowHandle, uint32_t width, uint32_t height);
 
     /// @brief Set background clear color for render pass.
     void setClearColor(double r, double g, double b, double a = 1.0) noexcept;
 
-    /// @brief Resize WebGPU surface swapchain viewport.
+    /// @brief Resize WebGPU surface swapchain and depth buffer.
     void resize(uint32_t width, uint32_t height) noexcept;
 
-    /// @brief Execute WebGPU Render Pass: Begin Render Pass, Clear Color Attachment, Submit & Present.
+    /// @brief Begin 3D Render Pass frame with Camera setup.
+    bool beginFrame(const Camera& camera, float time = 0.0f) noexcept;
+
+    /// @brief Render 3D Mesh with specified Texture and Model Transformation Matrix.
+    void drawMesh(const Mesh& mesh, const Texture& texture, const math::Mat4& modelMatrix) noexcept;
+
+    /// @brief End Render Pass, submit command buffer, and present surface.
+    void endFrame() noexcept;
+
+    /// @brief Legacy simple render pass method.
     void renderFrame(double deltaTime) noexcept;
 
     /// @brief Shutdown WebGPU resources cleanly.
@@ -53,22 +62,46 @@ public:
     [[nodiscard]] uint64_t frameCount() const noexcept { return _frameCount; }
     [[nodiscard]] uint32_t width() const noexcept { return _width; }
     [[nodiscard]] uint32_t height() const noexcept { return _height; }
-    [[nodiscard]] WGPUInstance instance() const noexcept { return _instance; }
-    [[nodiscard]] WGPUAdapter adapter() const noexcept { return _adapter; }
     [[nodiscard]] WGPUDevice device() const noexcept { return _device; }
     [[nodiscard]] WGPUQueue queue() const noexcept { return _queue; }
+
+    [[nodiscard]] const Texture& defaultCheckerTexture() const noexcept { return _defaultCheckerTex; }
+    [[nodiscard]] const Texture& defaultGridTexture() const noexcept { return _defaultGridTex; }
 
 private:
     void createSurface();
     void configureSurface();
+    void createDepthBuffer();
+    void createPipelineLayout();
+    void createRenderPipeline();
     void moveFrom(WebGpuBackend&& rhs) noexcept;
+
+    WGPUBindGroup createBindGroup(const Texture& texture) noexcept;
 
     WGPUInstance _instance = nullptr;
     WGPUAdapter _adapter = nullptr;
     WGPUDevice _device = nullptr;
     WGPUQueue _queue = nullptr;
     WGPUSurface _surface = nullptr;
+
+    WGPUTexture _depthTexture = nullptr;
+    WGPUTextureView _depthTextureView = nullptr;
+
+    WGPUBindGroupLayout _bindGroupLayout = nullptr;
+    WGPUPipelineLayout _pipelineLayout = nullptr;
     WGPURenderPipeline _pipeline = nullptr;
+    WGPUBuffer _uniformBuffer = nullptr;
+
+    WGPURenderPassEncoder _currentPass = nullptr;
+    WGPUCommandEncoder _currentEncoder = nullptr;
+    WGPUTexture _currentSurfaceTexture = nullptr;
+    WGPUTextureView _currentColorView = nullptr;
+    std::vector<WGPUBindGroup> _activeBindGroups{};
+
+    Texture _defaultCheckerTex{};
+    Texture _defaultGridTex{};
+
+    UniformBufferObject _currentUbo{};
     GLFWwindow* _window = nullptr;
 
     uint32_t _width = 1280;
@@ -76,6 +109,7 @@ private:
     uint64_t _frameCount = 0;
     WGPUColor _clearColor{ 0.08, 0.09, 0.12, 1.0 };
     bool _initialized = false;
+    bool _inFrame = false;
 };
 
 } // namespace corium_sim::renderer
