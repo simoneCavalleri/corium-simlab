@@ -23,6 +23,13 @@
 *.dll
 *.so.*
 
+# Python bytecode & cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
 
 # Fortran module files
 *.mod
