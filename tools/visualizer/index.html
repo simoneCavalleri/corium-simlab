@@ -276,6 +276,11 @@
             requestAnimationFrame(drawLidar);
         }
 
+        setInterval(() => {
+            const img = document.getElementById('cameraPreview');
+            img.src = '/agent_view.ppm?t=' + Date.now();
+        }, 1000);
+
         drawLidar();
     </script>
 </body>
