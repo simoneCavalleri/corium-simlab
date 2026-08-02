@@ -18,6 +18,7 @@
 #include "webgpu.h"
 #endif
 
+namespace corium_sim::scene { class SimScene; }
 struct GLFWwindow;
 
 namespace corium_sim::renderer {
@@ -54,6 +55,9 @@ public:
 
     /// @brief Create an Offscreen Render Target for agent visual cameras.
     OffscreenTarget createOffscreenTarget(uint32_t width = 128, uint32_t height = 128) noexcept;
+
+    /// @brief Render 3D Scene into an Offscreen Render Target from Camera perspective.
+    void renderOffscreen(const OffscreenTarget& target, const Camera& camera, const scene::SimScene& scene) noexcept;
 
     /// @brief Copy offscreen color texture to CPU staging buffer.
     bool copyOffscreenToStaging(const OffscreenTarget& target) noexcept;
