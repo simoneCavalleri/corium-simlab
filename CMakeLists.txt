@@ -4,6 +4,7 @@ project(corium_simlab LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Option to specify local Corium path
 set(CORIUM_LOCAL_PATH "" CACHE PATH "Path to local Corium repository")
@@ -73,3 +74,26 @@ add_custom_command(TARGET corium-simlab POST_BUILD
     "${wgpu_native_SOURCE_DIR}/libwgpu_native.so"
     "$<TARGET_FILE_DIR:corium-simlab>"
 )
+
+# 4. Optional Python C++ Extension Binding (pybind11)
+option(BUILD_PYTHON_BINDINGS "Build Python C++ Extension module" ON)
+
+if(BUILD_PYTHON_BINDINGS)
+    message(STATUS "Fetching pybind11 for Python environment bindings...")
+    FetchContent_Declare(
+        pybind11
+        GIT_REPOSITORY https://github.com/pybind/pybind11.git
+        GIT_TAG v2.12.0
+    )
+    FetchContent_MakeAvailable(pybind11)
+
+    pybind11_add_module(corium_sim_py src/python/bindings.cpp)
+    target_link_libraries(corium_sim_py PRIVATE corium_sim_core)
+
+    # Ensure libwgpu_native.so is copied next to Python extension module
+    add_custom_command(TARGET corium_sim_py POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${wgpu_native_SOURCE_DIR}/libwgpu_native.so"
+        "$<TARGET_FILE_DIR:corium_sim_py>"
+    )
+endif()
