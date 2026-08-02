@@ -188,7 +188,7 @@
                 <span style="color: var(--accent-cyan)">60 FPS</span>
             </div>
             <div class="viewport-container">
-                <img id="cameraPreview" src="../../agent_view.ppm" alt="Agent Viewport Live Frame" onerror="this.src='https://via.placeholder.com/512x512/0b0f19/3b82f6?text=SimLab+WebGPU+Camera+Stream'">
+                <canvas id="cameraCanvas" width="128" height="128" style="width: 320px; height: 320px; image-rendering: pixelated; border-radius: 8px; border: 1px solid var(--border-color);"></canvas>
                 <div class="overlay-stats">
                     <div><b>Resolution:</b> 128x128</div>
                     <div><b>Format:</b> RGBA 32-bit PBR</div>
@@ -276,11 +276,48 @@
             requestAnimationFrame(drawLidar);
         }
 
-        setInterval(() => {
-            const img = document.getElementById('cameraPreview');
-            img.src = '/agent_view.ppm?t=' + Date.now();
-        }, 1000);
+        async function loadPPM() {
+            try {
+                const resp = await fetch('/agent_view.ppm?t=' + Date.now());
+                if (!resp.ok) return;
+                const buf = await resp.arrayBuffer();
+                const bytes = new Uint8Array(buf);
+                
+                let headerEnd = 0;
+                let newlineCount = 0;
+                for (let i = 0; i < bytes.length; i++) {
+                    if (bytes[i] === 10) { // '\n'
+                        newlineCount++;
+                        if (newlineCount === 3) {
+                            headerEnd = i + 1;
+                            break;
+                        }
+                    }
+                }
 
+                const pixelData = bytes.subarray(headerEnd);
+                const c = document.getElementById('cameraCanvas');
+                if (!c) return;
+                const cCtx = c.getContext('2d');
+                const imgData = cCtx.createImageData(128, 128);
+
+                let p = 0;
+                for (let i = 0; i + 2 < pixelData.length && p < imgData.data.length; i += 3) {
+                    imgData.data[p]     = pixelData[i];     // R
+                    imgData.data[p + 1] = pixelData[i + 1]; // G
+                    imgData.data[p + 2] = pixelData[i + 2]; // B
+                    imgData.data[p + 3] = 255;              // Alpha
+                    p += 4;
+                }
+
+                cCtx.putImageData(imgData, 0, 0);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        setInterval(loadPPM, 1000);
+        loadPPM();
         drawLidar();
     </script>
 </body>

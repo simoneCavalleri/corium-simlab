@@ -85,8 +85,24 @@ def main():
             import webbrowser
 
             port = 8080
-            os.chdir(vis_dir)
-            handler = http.server.SimpleHTTPRequestHandler
+            class SimLabHttpHandler(http.server.SimpleHTTPRequestHandler):
+                def do_GET(self):
+                    if "agent_view.ppm" in self.path or "camera" in self.path:
+                        candidates = [
+                            "urdf_robot_view.ppm",
+                            "ik_robot_reach_view.ppm",
+                            "agent_view.ppm",
+                            "samples/python/urdf_robot_view.ppm",
+                            "samples/python/ik_robot_reach_view.ppm",
+                            "samples/python/agent_view.ppm"
+                        ]
+                        for cand in candidates:
+                            if os.path.exists(os.path.join(vis_dir, cand)):
+                                self.path = "/" + cand
+                                break
+                    return super().do_GET()
+
+            handler = SimLabHttpHandler
 
             print("=========================================================================")
             print(f" Corium SimLab Web Visualizer Dashboard Server running at:")
