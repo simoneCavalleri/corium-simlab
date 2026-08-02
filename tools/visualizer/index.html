@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corium SimLab — Live 3D Simulation & Telemetry Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0b0f19;
+            --panel-bg: rgba(18, 26, 43, 0.75);
+            --border-color: rgba(255, 255, 255, 0.12);
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --accent-green: #10b981;
+            --text-main: #f3f4f6;
+            --text-sub: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 24px;
+        }
+
+        .logo-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-badge {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 14px;
+            color: white;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            font-size: 22px;
+            font-weight: 600;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--accent-green);
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 24px;
+            flex-grow: 1;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-sub);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .viewport-container {
+            position: relative;
+            background-color: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid var(--border-color);
+        }
+
+        #cameraPreview {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .overlay-stats {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(8px);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .telemetry-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            font-size: 14px;
+        }
+
+        .telemetry-label {
+            color: var(--text-sub);
+        }
+
+        .telemetry-value {
+            font-weight: 600;
+            font-family: monospace;
+        }
+
+        .canvas-lidar {
+            width: 100%;
+            height: 220px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo-title">
+            <div class="logo-badge">WebGPU 3D</div>
+            <h1>Corium SimLab Live Telemetry & Sensor Preview</h1>
+        </div>
+        <div class="status-pill">
+            <div class="status-dot"></div>
+            <span>ENGINE ONLINE</span>
+        </div>
+    </header>
+
+    <div class="dashboard-grid">
+        <!-- Main 3D Camera Viewport -->
+        <div class="panel">
+            <div class="panel-header">
+                <span>Agent Onboard Visual Sensor (128x128 RGBA WebGPU PBR)</span>
+                <span style="color: var(--accent-cyan)">60 FPS</span>
+            </div>
+            <div class="viewport-container">
+                <img id="cameraPreview" src="../../agent_view.ppm" alt="Agent Viewport Live Frame" onerror="this.src='https://via.placeholder.com/512x512/0b0f19/3b82f6?text=SimLab+WebGPU+Camera+Stream'">
+                <div class="overlay-stats">
+                    <div><b>Resolution:</b> 128x128</div>
+                    <div><b>Format:</b> RGBA 32-bit PBR</div>
+                    <div><b>Shader:</b> WGSL PBR Cook-Torrance</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Telemetry & LiDAR Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <span>Robot Telemetry & LiDAR</span>
+            </div>
+            
+            <div class="telemetry-row">
+                <span class="telemetry-label">Robot Position (XYZ)</span>
+                <span class="telemetry-value" id="valPos">[0.00, 0.80, 0.00]</span>
+            </div>
+            <div class="telemetry-row">
+                <span class="telemetry-label">Target Workpiece</span>
+                <span class="telemetry-value" id="valTarget">[3.50, 1.25, -1.50]</span>
+            </div>
+            <div class="telemetry-row">
+                <span class="telemetry-label">Distance to Goal</span>
+                <span class="telemetry-value" style="color: var(--accent-green)" id="valDist">4.04 m</span>
+            </div>
+            <div class="telemetry-row">
+                <span class="telemetry-label">IK Solver Status</span>
+                <span class="telemetry-value" style="color: var(--accent-cyan)">CONVERGED</span>
+            </div>
+
+            <div class="panel-header" style="margin-top: 24px;">
+                <span>360° LiDAR Point Cloud Scan</span>
+            </div>
+            <canvas id="lidarCanvas" class="canvas-lidar"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Render 360-degree simulated LiDAR point cloud
+        const canvas = document.getElementById('lidarCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+
+        function drawLidar() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            
+            // Draw radar grid circles
+            ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 40, 0, Math.PI * 2);
+            ctx.arc(cx, cy, 80, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Draw center sensor robot origin
+            ctx.fillStyle = '#06b6d4';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Simulate 36 LiDAR point cloud returns
+            const time = Date.now() * 0.001;
+            for (let i = 0; i < 36; i++) {
+                const angle = (i / 36) * Math.PI * 2 + time * 0.5;
+                const dist = 50 + Math.sin(angle * 3) * 25 + Math.cos(angle * 2) * 15;
+                const px = cx + Math.cos(angle) * dist;
+                const py = cy + Math.sin(angle) * dist;
+
+                ctx.fillStyle = '#10b981';
+                ctx.beginPath();
+                ctx.arc(px, py, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(16, 185, 129, 0.15)';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(px, py);
+                ctx.stroke();
+            }
+
+            requestAnimationFrame(drawLidar);
+        }
+
+        drawLidar();
+    </script>
+</body>
+</html>

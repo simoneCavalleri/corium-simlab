@@ -104,6 +104,19 @@ class CoriumEnv:
             "rgb": rgb_frame
         }
 
+    def get_pil_image(self):
+        """Extract current onboard camera frame as a PIL Image object."""
+        rgb_bytes = self._app.get_sensor_frame()
+        try:
+            from PIL import Image
+            return Image.frombytes("RGBA", (128, 128), rgb_bytes)
+        except ImportError:
+            return rgb_bytes
+
+    def save_sensor_frame_ppm(self, filename: str) -> bool:
+        """Save current onboard camera frame directly to a PPM image file."""
+        return self._app.save_sensor_frame_ppm(filename)
+
     def close(self):
         """Clean up environment resources."""
         pass
