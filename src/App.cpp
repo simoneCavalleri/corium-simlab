@@ -244,6 +244,9 @@ void SimLabApp::onRender(double deltaTime)
             .stepIndex = _simStepCount
         });
 
+        // Render onboard agent visual sensor 3D view to offscreen target
+        _gpuBackend.renderOffscreen(_sensorTarget, _sensorCamera.camera(), _scene);
+
         // Extract visual sensor frame from WebGPU staging buffer
         std::vector<uint8_t> sensorPixels = _gpuBackend.readOffscreenPixels(_sensorTarget);
 

@@ -180,20 +180,24 @@ PYBIND11_MODULE(corium_sim_py, m) {
         }, py::arg("dt") = 0.016667f,
         "Advance physics and kinematics simulation by one timestep.")
         .def("get_sensor_frame", [](SimLabApp& self) {
-            if (!self.renderer().isInitialized()) {
-                self.renderer().initialize(nullptr, 1280, 720);
-            }
-            scene::SimEntity* agent = self.scene().findEntity("agent_robot");
-            if (!agent) agent = self.scene().findEntity("robot_agent");
-            if (agent) {
-                self.sensorCamera().updateMountPose(agent->position, agent->rotation);
-            }
+            auto fetch_pixels = [](SimLabApp& app) -> std::vector<uint8_t> {
+                if (!app.renderer().isInitialized()) {
+                    app.renderer().initialize(nullptr, 1280, 720);
+                }
+                scene::SimEntity* agent = app.scene().findEntity("agent_robot");
+                if (!agent) agent = app.scene().findEntity("robot_agent");
+                if (agent) {
+                    app.sensorCamera().updateMountPose(agent->position, agent->rotation);
+                }
 
-            auto target = self.renderer().createOffscreenTarget(128, 128);
-            self.renderer().renderOffscreen(target, self.sensorCamera().camera(), self.scene());
-            auto pixels = self.renderer().readOffscreenPixels(target);
-            self.renderer().destroyOffscreenTarget(target);
+                auto target = app.renderer().createOffscreenTarget(128, 128);
+                app.renderer().renderOffscreen(target, app.sensorCamera().camera(), app.scene());
+                auto pixels = app.renderer().readOffscreenPixels(target);
+                app.renderer().destroyOffscreenTarget(target);
+                return pixels;
+            };
 
+            auto pixels = fetch_pixels(self);
             uint32_t w = self.sensorCamera().width();
             uint32_t h = self.sensorCamera().height();
 

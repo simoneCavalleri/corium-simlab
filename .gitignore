@@ -59,11 +59,13 @@ Makefile
 install_manifest.txt
 compile_commands.json
 
-# Temporary files
+# Temporary files & output images
 *.tmp
 *.log
 *.bak
 *.swp
+*.ppm
+*.png
 
 # vcpkg
 vcpkg_installed/
