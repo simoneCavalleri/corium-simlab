@@ -49,4 +49,45 @@ void JointKinematics::updateKinematics(scene::SimScene& scene, float deltaTime) 
     }
 }
 
+bool JointKinematics::solveIK(
+    scene::SimScene& scene,
+    const std::string& endEffectorName,
+    const Vec3& targetPosition,
+    uint32_t maxIterations,
+    float tolerance
+) noexcept
+{
+    scene::SimEntity* endEffector = scene.findEntity(endEffectorName);
+    if (!endEffector) return false;
+
+    const float stepSize = 0.05f;
+
+    for (uint32_t iter = 0; iter < maxIterations; ++iter) {
+        updateKinematics(scene, 0.0f);
+        Vec3 currentPos = endEffector->position;
+        Vec3 error = targetPosition - currentPos;
+
+        if (error.length() < tolerance) {
+            return true;
+        }
+
+        for (auto& joint : scene.joints()) {
+            float delta = 0.001f;
+            float originalPos = joint.position;
+
+            joint.position = originalPos + delta;
+            updateKinematics(scene, 0.0f);
+            Vec3 perturbedPos = endEffector->position;
+
+            Vec3 gradient = (perturbedPos - currentPos) * (1.0f / delta);
+            float dErr = error.x * gradient.x + error.y * gradient.y + error.z * gradient.z;
+
+            joint.position = std::clamp(originalPos + stepSize * dErr, joint.minLimit, joint.maxLimit);
+        }
+    }
+
+    updateKinematics(scene, 0.0f);
+    return (endEffector->position - targetPosition).length() < tolerance;
+}
+
 } // namespace corium_sim::kinematics

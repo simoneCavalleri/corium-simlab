@@ -179,6 +179,10 @@ PYBIND11_MODULE(corium_sim_py, m) {
             self.jointKinematics().updateKinematics(self.scene(), dt);
         }, py::arg("dt") = 0.016667f,
         "Advance physics and kinematics simulation by one timestep.")
+        .def("solve_ik", [](SimLabApp& self, const std::string& endEffectorName, float targetX, float targetY, float targetZ, uint32_t maxIterations, float tolerance) {
+            return self.jointKinematics().solveIK(self.scene(), endEffectorName, Vec3{targetX, targetY, targetZ}, maxIterations, tolerance);
+        }, py::arg("end_effector_name"), py::arg("target_x"), py::arg("target_y"), py::arg("target_z"), py::arg("max_iterations") = 50, py::arg("tolerance") = 0.01f,
+        "Solve Inverse Kinematics to move specified end-effector link to target (x, y, z) position.")
         .def("get_sensor_frame", [](SimLabApp& self) {
             auto fetch_pixels = [](SimLabApp& app) -> std::vector<uint8_t> {
                 if (!app.renderer().isInitialized()) {
