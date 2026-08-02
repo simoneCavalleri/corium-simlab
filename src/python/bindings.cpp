@@ -11,6 +11,7 @@
 #include "corium_sim/scene/SceneBuilder.hpp"
 #include "corium_sim/scene/SimScene.hpp"
 #include "corium_sim/scene/UrdfLoader.hpp"
+#include "corium_sim/physics/Raycast.hpp"
 
 namespace py = pybind11;
 using namespace corium_sim;
@@ -191,6 +192,32 @@ PYBIND11_MODULE(corium_sim_py, m) {
             return self.jointKinematics().solveIK(self.scene(), endEffectorName, Vec3{targetX, targetY, targetZ}, maxIterations, tolerance);
         }, py::arg("end_effector_name"), py::arg("target_x"), py::arg("target_y"), py::arg("target_z"), py::arg("max_iterations") = 50, py::arg("tolerance") = 0.01f,
         "Solve Inverse Kinematics to move specified end-effector link to target (x, y, z) position.")
+        .def("cast_ray", [](SimLabApp& self, float origX, float origY, float origZ, float dirX, float dirY, float dirZ, float maxDist) {
+            auto hit = physics::Raycast::castRay(self.scene(), Vec3{origX, origY, origZ}, Vec3{dirX, dirY, dirZ}, maxDist);
+            py::dict res;
+            res["hit"] = hit.hit;
+            res["distance"] = hit.distance;
+            res["point"] = std::vector<float>{hit.point.x, hit.point.y, hit.point.z};
+            res["normal"] = std::vector<float>{hit.normal.x, hit.normal.y, hit.normal.z};
+            res["entity"] = hit.entityName;
+            return res;
+        }, py::arg("orig_x"), py::arg("orig_y"), py::arg("orig_z"), py::arg("dir_x"), py::arg("dir_y"), py::arg("dir_z"), py::arg("max_distance") = 50.0f,
+        "Cast a 3D ray into the scene and return hit dictionary (hit, distance, point, normal, entity).")
+        .def("cast_lidar_scan", [](SimLabApp& self, float origX, float origY, float origZ, uint32_t numRays, float fovDeg, float maxDist) {
+            auto hits = physics::Raycast::castLidarScan(self.scene(), Vec3{origX, origY, origZ}, Vec3{0.0f, 0.0f, 1.0f}, numRays, fovDeg, maxDist);
+            py::list results;
+            for (const auto& hit : hits) {
+                py::dict item;
+                item["hit"] = hit.hit;
+                item["distance"] = hit.distance;
+                item["point"] = std::vector<float>{hit.point.x, hit.point.y, hit.point.z};
+                item["normal"] = std::vector<float>{hit.normal.x, hit.normal.y, hit.normal.z};
+                item["entity"] = hit.entityName;
+                results.append(item);
+            }
+            return results;
+        }, py::arg("orig_x") = 0.0f, py::arg("orig_y") = 1.0f, py::arg("orig_z") = 0.0f, py::arg("num_rays") = 36, py::arg("fov_deg") = 360.0f, py::arg("max_distance") = 20.0f,
+        "Perform a 360-degree 3D LiDAR point cloud scan around sensor origin and return list of hit dicts.")
         .def("get_sensor_frame", [](SimLabApp& self) {
             auto fetch_pixels = [](SimLabApp& app) -> std::vector<uint8_t> {
                 if (!app.renderer().isInitialized()) {

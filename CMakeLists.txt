@@ -60,6 +60,7 @@ add_library(corium_sim_core STATIC
     src/scene/SceneBuilder.cpp
     src/scene/UrdfLoader.cpp
     src/physics/PhysicsEngine.cpp
+    src/physics/Raycast.cpp
     src/kinematics/JointKinematics.cpp
     src/App.cpp
 )
