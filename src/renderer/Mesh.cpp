@@ -313,4 +313,116 @@ Mesh Mesh::createPyramid(WGPUDevice device, WGPUQueue queue, float baseWidth, fl
     return mesh;
 }
 
+Mesh Mesh::createCylinder(WGPUDevice device, WGPUQueue queue, float radius, float height, uint32_t segments)
+{
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    float halfH = height * 0.5f;
+
+    // Lateral surface vertices
+    for (uint32_t i = 0; i <= segments; ++i) {
+        float angle = static_cast<float>(i) / static_cast<float>(segments) * 2.0f * 3.14159265f;
+        float cx = std::cos(angle);
+        float cz = std::sin(angle);
+        float u = static_cast<float>(i) / static_cast<float>(segments);
+
+        // Bottom ring vertex
+        vertices.push_back({
+            {radius * cx, -halfH, radius * cz},
+            {cx, 0.0f, cz},
+            {u, 1.0f},
+            {0.7f, 0.75f, 0.8f, 1.0f}
+        });
+        // Top ring vertex
+        vertices.push_back({
+            {radius * cx, halfH, radius * cz},
+            {cx, 0.0f, cz},
+            {u, 0.0f},
+            {0.7f, 0.75f, 0.8f, 1.0f}
+        });
+    }
+
+    // Lateral surface indices (quad strips)
+    for (uint32_t i = 0; i < segments; ++i) {
+        uint32_t bot0 = i * 2;
+        uint32_t top0 = i * 2 + 1;
+        uint32_t bot1 = (i + 1) * 2;
+        uint32_t top1 = (i + 1) * 2 + 1;
+
+        indices.push_back(bot0);
+        indices.push_back(bot1);
+        indices.push_back(top1);
+
+        indices.push_back(bot0);
+        indices.push_back(top1);
+        indices.push_back(top0);
+    }
+
+    // Top cap center vertex
+    uint32_t topCenterIdx = static_cast<uint32_t>(vertices.size());
+    vertices.push_back({
+        {0.0f, halfH, 0.0f},
+        {0.0f, 1.0f, 0.0f},
+        {0.5f, 0.5f},
+        {0.75f, 0.8f, 0.85f, 1.0f}
+    });
+
+    // Top cap ring vertices
+    uint32_t topRingStart = static_cast<uint32_t>(vertices.size());
+    for (uint32_t i = 0; i < segments; ++i) {
+        float angle = static_cast<float>(i) / static_cast<float>(segments) * 2.0f * 3.14159265f;
+        float cx = std::cos(angle);
+        float cz = std::sin(angle);
+        vertices.push_back({
+            {radius * cx, halfH, radius * cz},
+            {0.0f, 1.0f, 0.0f},
+            {cx * 0.5f + 0.5f, cz * 0.5f + 0.5f},
+            {0.75f, 0.8f, 0.85f, 1.0f}
+        });
+    }
+
+    // Top cap indices (fan triangulation)
+    for (uint32_t i = 0; i < segments; ++i) {
+        indices.push_back(topCenterIdx);
+        indices.push_back(topRingStart + i);
+        indices.push_back(topRingStart + ((i + 1) % segments));
+    }
+
+    // Bottom cap center vertex
+    uint32_t botCenterIdx = static_cast<uint32_t>(vertices.size());
+    vertices.push_back({
+        {0.0f, -halfH, 0.0f},
+        {0.0f, -1.0f, 0.0f},
+        {0.5f, 0.5f},
+        {0.75f, 0.8f, 0.85f, 1.0f}
+    });
+
+    // Bottom cap ring vertices
+    uint32_t botRingStart = static_cast<uint32_t>(vertices.size());
+    for (uint32_t i = 0; i < segments; ++i) {
+        float angle = static_cast<float>(i) / static_cast<float>(segments) * 2.0f * 3.14159265f;
+        float cx = std::cos(angle);
+        float cz = std::sin(angle);
+        vertices.push_back({
+            {radius * cx, -halfH, radius * cz},
+            {0.0f, -1.0f, 0.0f},
+            {cx * 0.5f + 0.5f, cz * 0.5f + 0.5f},
+            {0.75f, 0.8f, 0.85f, 1.0f}
+        });
+    }
+
+    // Bottom cap indices (reversed winding for outward-facing normals)
+    for (uint32_t i = 0; i < segments; ++i) {
+        indices.push_back(botCenterIdx);
+        indices.push_back(botRingStart + ((i + 1) % segments));
+        indices.push_back(botRingStart + i);
+    }
+
+    Mesh mesh;
+    mesh.upload(device, queue, vertices, indices);
+    return mesh;
+}
+
 } // namespace corium_sim::renderer
+

@@ -1,6 +1,6 @@
 #include "corium_sim/scene/SceneBuilder.hpp"
 #include "corium_sim/renderer/MeshLoader.hpp"
-#include <iostream>
+#include "corium_sim/Log.hpp"
 
 namespace corium_sim::scene {
 
@@ -117,7 +117,7 @@ SceneBuilder& SceneBuilder::addModel(
 
     renderer::MeshData data = renderer::MeshLoader::parseOBJFile(objFilePath);
     if (!data.success) {
-        std::cerr << "[SceneBuilder] Warning: Failed to load OBJ model from path: " << objFilePath << "\n";
+        CORIUM_LOG_WARN("SceneBuilder", "Failed to load OBJ model from path: ", objFilePath);
         return *this;
     }
 
@@ -131,6 +131,33 @@ SceneBuilder& SceneBuilder::addModel(
     entity.scale = scale;
     entity.rotation = rotation;
     entity.localBounds = data.bounds;
+
+    _scene.addEntity(std::move(entity));
+    return *this;
+}
+
+SceneBuilder& SceneBuilder::addCylinder(
+    std::string name,
+    const Vec3& position,
+    float radius,
+    float height,
+    uint32_t segments,
+    const Vec3& scale,
+    const renderer::Material& material
+)
+{
+    if (!_device || !_queue) return *this;
+
+    SimEntity entity{};
+    entity.id = _nextEntityId++;
+    entity.name = std::move(name);
+    entity.mesh = renderer::Mesh::createCylinder(_device, _queue, radius, height, segments);
+    entity.texture = renderer::Texture::createCheckerboard(_device, _queue, 256, 256, 32);
+    entity.material = material;
+    entity.position = position;
+    entity.scale = scale;
+    float halfH = height * 0.5f;
+    entity.localBounds = renderer::BoundingBox{{-radius, -halfH, -radius}, {radius, halfH, radius}};
 
     _scene.addEntity(std::move(entity));
     return *this;
@@ -173,8 +200,8 @@ SceneBuilder& SceneBuilder::addJoint(
 
 SimScene SceneBuilder::build()
 {
-    std::cout << "[SceneBuilder] Finalized 3D simulation environment scene with "
-              << _scene.entityCount() << " entities.\n";
+    CORIUM_LOG_INFO("SceneBuilder", "Finalized 3D simulation environment scene with ",
+                    _scene.entityCount(), " entities.");
     return std::move(_scene);
 }
 

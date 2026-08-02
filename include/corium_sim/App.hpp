@@ -1,5 +1,6 @@
 #pragma once
 
+#include "corium_sim/SimConfig.hpp"
 #include "corium_sim/events/SimEvents.hpp"
 #include "corium_sim/physics/PhysicsEngine.hpp"
 #include "corium_sim/renderer/Camera.hpp"
@@ -57,6 +58,11 @@ public:
     [[nodiscard]] physics::PhysicsEngine& physics() noexcept { return _physicsEngine; }
     [[nodiscard]] kinematics::JointKinematics& jointKinematics() noexcept { return _jointKinematics; }
 
+    /// @brief Set simulation configuration parameters.
+    void setConfig(const SimConfig& config) noexcept { _config = config; }
+    [[nodiscard]] const SimConfig& config() const noexcept { return _config; }
+    [[nodiscard]] SimConfig& config() noexcept { return _config; }
+
 private:
     renderer::WebGpuBackend _gpuBackend{};
     renderer::Camera _camera{};
@@ -66,11 +72,11 @@ private:
     scene::SimScene _scene{};
     physics::PhysicsEngine _physicsEngine{};
     kinematics::JointKinematics _jointKinematics{};
+    SimConfig _config{};
 
     uint32_t _renderFramesCount = 0;
     uint64_t _simStepCount = 0;
     uint64_t _episodeCount = 0;
-    uint32_t _maxEpisodeSteps = 500;
 };
 
 } // namespace corium_sim

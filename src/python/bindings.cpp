@@ -3,6 +3,7 @@
 #include <pybind11/numpy.h>
 
 #include "corium_sim/App.hpp"
+#include "corium_sim/SimConfig.hpp"
 #include "corium_sim/math/Math.hpp"
 #include "corium_sim/renderer/Material.hpp"
 #include "corium_sim/scene/SceneBuilder.hpp"
@@ -90,15 +91,49 @@ PYBIND11_MODULE(corium_sim_py, m) {
         .def("entity_count", &SimScene::entityCount)
         .def("destroy", &SimScene::destroy);
 
-    // 4. Main Simulation App & Gymnasium Helper Bindings
+    // 5. SimConfig Bindings
+    py::class_<SimConfig>(m, "SimConfig")
+        .def(py::init<>())
+        .def_readwrite("max_episode_steps", &SimConfig::maxEpisodeSteps)
+        .def_readwrite("sensor_width", &SimConfig::sensorWidth)
+        .def_readwrite("sensor_height", &SimConfig::sensorHeight)
+        .def_readwrite("reach_threshold", &SimConfig::reachThreshold)
+        .def_readwrite("reach_bonus", &SimConfig::reachBonus)
+        .def_readwrite("enable_gravity", &SimConfig::enableGravity)
+        .def_readwrite("gravity", &SimConfig::gravity)
+        .def_readwrite("fixed_timestep", &SimConfig::fixedTimestep);
+
+    // 6. Main Simulation App & Gymnasium Helper Bindings
     py::class_<SimLabApp>(m, "SimLabApp")
         .def(py::init<>())
         .def("reset", &SimLabApp::resetEnvironment)
+        .def_property("config",
+            [](SimLabApp& self) -> SimConfig& { return self.config(); },
+            [](SimLabApp& self, const SimConfig& cfg) { self.setConfig(cfg); })
         .def("set_joint_position", [](SimLabApp& self, const std::string& name, float pos) {
             if (auto* j = self.scene().findJoint(name)) {
                 j->position = pos;
             }
         }, py::arg("joint_name"), py::arg("position"))
+        .def("apply_action", [](SimLabApp& self, float moveForward, float turnYaw, float moveUp) {
+            scene::SimEntity* agent = self.scene().findEntity("agent_robot");
+            if (!agent) agent = self.scene().findEntity("robot_agent");
+
+            if (agent) {
+                float yawRad = agent->rotation.y * DEG2RAD;
+                Vec3 forward{std::sin(yawRad), 0.0f, std::cos(yawRad)};
+
+                agent->velocity += forward * (moveForward * 5.0f);
+                agent->angularVelocity.y = turnYaw * 90.0f;
+                agent->velocity.y += moveUp * 5.0f;
+            }
+        }, py::arg("move_forward") = 0.0f, py::arg("turn_yaw") = 0.0f, py::arg("move_up") = 0.0f,
+        "Apply movement action to the agent: forward/backward, yaw rotation, vertical.")
+        .def("sim_step", [](SimLabApp& self, float dt) {
+            self.physics().step(self.scene(), dt);
+            self.jointKinematics().updateKinematics(self.scene(), dt);
+        }, py::arg("dt") = 0.016667f,
+        "Advance physics and kinematics simulation by one timestep.")
         .def("get_sensor_frame", [](SimLabApp& self) {
             auto pixels = self.renderer().readOffscreenPixels(self.renderer().createOffscreenTarget(128, 128));
             uint32_t w = self.sensorCamera().width();
@@ -133,3 +168,4 @@ PYBIND11_MODULE(corium_sim_py, m) {
             return obs;
         });
 }
+

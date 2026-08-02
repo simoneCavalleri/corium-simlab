@@ -5,6 +5,9 @@
 // =============================================================================
 
 #include "corium_sim/App.hpp"
+#include "corium_sim/AssetResolver.hpp"
+#include "corium_sim/Log.hpp"
+#include "corium_sim/SimConfig.hpp"
 #include "corium_sim/events/SimEvents.hpp"
 #include "corium_sim/kinematics/JointKinematics.hpp"
 #include "corium_sim/kinematics/SimJoint.hpp"

@@ -1,7 +1,8 @@
 #include "corium_sim/renderer/MeshLoader.hpp"
+#include "corium_sim/AssetResolver.hpp"
+#include "corium_sim/Log.hpp"
 #include <fstream>
 #include <sstream>
-#include <iostream>
 #include <map>
 #include <tuple>
 
@@ -11,26 +12,11 @@ using namespace math;
 
 MeshData MeshLoader::parseOBJFile(const std::string& filePath)
 {
-    std::vector<std::string> candidates = {
-        filePath,
-        "../" + filePath,
-        "../../" + filePath,
-        "assets/models/" + filePath
-    };
+    std::string resolvedPath = AssetResolver::resolve(filePath);
 
-    std::ifstream file;
-    std::string resolvedPath;
-
-    for (const auto& path : candidates) {
-        file.open(path);
-        if (file.is_open()) {
-            resolvedPath = path;
-            break;
-        }
-    }
-
+    std::ifstream file(resolvedPath);
     if (!file.is_open()) {
-        std::cerr << "[MeshLoader] Error: Unable to open OBJ file: " << filePath << "\n";
+        CORIUM_LOG_ERROR("MeshLoader", "Unable to open OBJ file: ", filePath, " (resolved to: ", resolvedPath, ")");
         return {};
     }
 
@@ -154,9 +140,9 @@ MeshData MeshLoader::parseOBJMemory(std::string_view content)
 
     meshData.success = !meshData.vertices.empty() && !meshData.indices.empty();
     if (meshData.success) {
-        std::cout << "[MeshLoader] Successfully parsed 3D OBJ model: "
-                  << meshData.vertices.size() << " vertices, "
-                  << meshData.indices.size() / 3 << " triangles.\n";
+        CORIUM_LOG_INFO("MeshLoader", "Successfully parsed 3D OBJ model: ",
+                        meshData.vertices.size(), " vertices, ",
+                        meshData.indices.size() / 3, " triangles.");
     }
 
     return meshData;

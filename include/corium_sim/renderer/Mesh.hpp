@@ -51,6 +51,7 @@ public:
     static Mesh createSphere(WGPUDevice device, WGPUQueue queue, float radius = 0.5f, uint32_t rings = 24, uint32_t sectors = 24);
     static Mesh createPlane(WGPUDevice device, WGPUQueue queue, float width = 20.0f, float depth = 20.0f, uint32_t gridSubdivisions = 20);
     static Mesh createPyramid(WGPUDevice device, WGPUQueue queue, float baseWidth = 1.0f, float height = 1.5f);
+    static Mesh createCylinder(WGPUDevice device, WGPUQueue queue, float radius = 0.5f, float height = 1.0f, uint32_t segments = 24);
 
 private:
     WGPUBuffer _vertexBuffer = nullptr;

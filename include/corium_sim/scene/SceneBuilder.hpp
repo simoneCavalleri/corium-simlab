@@ -62,6 +62,17 @@ public:
         const renderer::Material& material = {}
     );
 
+    /// @brief Add a 3D Cylinder primitive entity to the scene with material properties.
+    SceneBuilder& addCylinder(
+        std::string name,
+        const math::Vec3& position = {0.0f, 0.0f, 0.0f},
+        float radius = 0.5f,
+        float height = 1.0f,
+        uint32_t segments = 24,
+        const math::Vec3& scale = {1.0f, 1.0f, 1.0f},
+        const renderer::Material& material = {}
+    );
+
     /// @brief Add a custom pre-constructed entity to the scene.
     SceneBuilder& addEntity(SimEntity entity);
 

@@ -18,12 +18,22 @@ except ImportError:
 class CoriumEnv:
     """
     Standard Gymnasium-compliant Reinforcement Learning Environment for Corium SimLab.
+
+    Actions:
+        action[0]: move_forward  — linear velocity forward/backward [-1, 1]
+        action[1]: turn_yaw      — angular velocity yaw rotation [-1, 1]
+        action[2]: move_up       — vertical velocity up/down [-1, 1]
+
+    Observations:
+        "vector": np.array of shape (9,) — [agent_pos(3), agent_vel(3), target_pos(3)]
+        "rgb":    np.array of shape (128, 128, 4) — RGBA sensor camera frame
     """
-    def __init__(self, render_mode: str = "human"):
+    def __init__(self, render_mode: str = "human", max_steps: int = 500, sim_dt: float = 0.016667):
         self.render_mode = render_mode
         self._app = corium_sim_py.SimLabApp()
         self._step_count = 0
-        self._max_steps = 500
+        self._max_steps = max_steps
+        self._sim_dt = sim_dt
 
     def reset(self, seed: int = None, options: dict = None):
         self._step_count = 0
@@ -44,7 +54,11 @@ class CoriumEnv:
         turn_yaw = float(action[1]) if len(action) > 1 else 0.0
         move_up = float(action[2]) if len(action) > 2 else 0.0
 
-        # Extract current observation state
+        # Apply agent action forces and advance physics simulation
+        self._app.apply_action(move_forward, turn_yaw, move_up)
+        self._app.sim_step(self._sim_dt)
+
+        # Extract current observation state after physics step
         raw_obs = self._app.get_observation()
         dist = raw_obs.get("distance", 5.0)
         reward = raw_obs.get("reward", -dist)
@@ -52,7 +66,10 @@ class CoriumEnv:
         truncated = (self._step_count >= self._max_steps)
 
         obs = self._get_obs()
-        info = {"distance_to_target": dist}
+        info = {
+            "distance_to_target": dist,
+            "episode_step": self._step_count,
+        }
 
         return obs, reward, terminated, truncated, info
 

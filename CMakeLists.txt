@@ -63,6 +63,7 @@ add_library(corium_sim_core STATIC
 )
 
 target_include_directories(corium_sim_core PUBLIC include ${wgpu_native_SOURCE_DIR})
+target_compile_definitions(corium_sim_core PUBLIC CORIUM_SIMLAB_ROOT_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(corium_sim_core PUBLIC corium glfw ${WGPU_NATIVE_LIB})
 
 # 4. Optional Python C++ Extension Binding (pybind11)

@@ -1,6 +1,6 @@
 #include "corium_sim/App.hpp"
+#include "corium_sim/Log.hpp"
 #include "corium_sim/renderer/MeshLoader.hpp"
-#include <iostream>
 
 namespace corium_sim {
 
@@ -52,7 +52,7 @@ void SimLabApp::onSetContext(corium::AppCoreContextT<SimRuntime::EventBusType> c
         _camera.onKey(evt.key, evt.pressed);
 
         if (evt.key == 256 && evt.pressed) { // GLFW_KEY_ESCAPE
-            std::cout << "[SimLab] ESC key pressed, shutting down simulation environment...\n";
+            CORIUM_LOG_INFO("SimLab", "ESC key pressed, shutting down simulation environment...");
             requestQuit();
         }
     });
@@ -141,7 +141,7 @@ void SimLabApp::onInitialize()
     _camera.setDistance(12.0f);
 
     _sensorTarget = _gpuBackend.createOffscreenTarget(128, 128);
-    std::cout << "[SimLab] 3D WebGPU Engine & 128x128 Offscreen Sensor Camera Target Initialized.\n";
+    CORIUM_LOG_INFO("SimLab", "3D WebGPU Engine & ", _config.sensorWidth, "x", _config.sensorHeight, " Offscreen Sensor Camera Target Initialized.");
 }
 
 void SimLabApp::setScene(scene::SimScene scene) noexcept
@@ -168,7 +168,7 @@ void SimLabApp::resetEnvironment() noexcept
         agent->angularVelocity = Vec3{0.0f, 0.0f, 0.0f};
     }
 
-    std::cout << "[SimLab] Environment reset to Episode #" << _episodeCount << "\n";
+    CORIUM_LOG_INFO("SimLab", "Environment reset to Episode #", _episodeCount);
 }
 
 bool SimLabApp::loadSceneMesh(const std::string& filePath)
@@ -190,7 +190,7 @@ bool SimLabApp::loadSceneMesh(const std::string& filePath)
 
     renderer::BoundingBox bounds = _scene.sceneBounds();
     _camera.focusOnBounds(bounds.min, bounds.max);
-    std::cout << "[SimLab] 3D Mesh asset successfully added to simulation scene!\n";
+    CORIUM_LOG_INFO("SimLab", "3D Mesh asset successfully added to simulation scene!");
     return true;
 }
 
@@ -230,9 +230,9 @@ void SimLabApp::onRender(double deltaTime)
         Vec3 targetPos = target->position;
         float dist = (agentPos - targetPos).length();
 
-        bool isReached = (dist < 1.5f);
-        bool isTruncated = (_simStepCount >= _maxEpisodeSteps);
-        float reward = -dist + (isReached ? 100.0f : 0.0f);
+        bool isReached = (dist < _config.reachThreshold);
+        bool isTruncated = (_simStepCount >= _config.maxEpisodeSteps);
+        float reward = -dist + (isReached ? _config.reachBonus : 0.0f);
 
         // Update onboard agent visual sensor camera pose
         _sensorCamera.updateMountPose(agentPos, agent->rotation);
@@ -307,10 +307,10 @@ void SimLabApp::onShutdown()
     _scene.destroy();
     _gpuBackend.shutdown();
 
-    std::cout << "[SimLab] Application Shutdown Summary:\n";
-    std::cout << "  - Total Simulation Episodes: " << _episodeCount << "\n";
-    std::cout << "  - Total Simulation Steps:    " << _simStepCount << "\n";
-    std::cout << "  - Total Render Frames:       " << _renderFramesCount << "\n";
+    CORIUM_LOG_INFO("SimLab", "Application Shutdown Summary:");
+    CORIUM_LOG_INFO("SimLab", "  - Total Simulation Episodes: ", _episodeCount);
+    CORIUM_LOG_INFO("SimLab", "  - Total Simulation Steps:    ", _simStepCount);
+    CORIUM_LOG_INFO("SimLab", "  - Total Render Frames:       ", _renderFramesCount);
 }
 
 } // namespace corium_sim
