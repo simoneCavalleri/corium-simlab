@@ -78,13 +78,34 @@ def main():
             print(f"[Error] Sample file not found: {sample_path}")
 
     elif args.command == "visualizer":
-        html_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "tools", "visualizer", "index.html"))
-        if os.path.exists(html_path):
+        vis_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        if os.path.exists(vis_dir):
+            import http.server
+            import socketserver
             import webbrowser
-            print(f"[Corium SimLab CLI] Opening Web Telemetry Visualizer Dashboard: file://{html_path}")
-            webbrowser.open(f"file://{html_path}")
+
+            port = 8080
+            os.chdir(vis_dir)
+            handler = http.server.SimpleHTTPRequestHandler
+
+            print("=========================================================================")
+            print(f" Corium SimLab Web Visualizer Dashboard Server running at:")
+            print(f"   --> http://localhost:{port}/tools/visualizer/index.html")
+            print(f" Press Ctrl+C to stop server.")
+            print("=========================================================================\n")
+
+            try:
+                webbrowser.open(f"http://localhost:{port}/tools/visualizer/index.html")
+            except Exception:
+                pass
+
+            try:
+                with socketserver.TCPServer(("", port), handler) as httpd:
+                    httpd.serve_forever()
+            except KeyboardInterrupt:
+                print("\n[Corium SimLab CLI] Visualizer server stopped.")
         else:
-            print(f"[Error] Visualizer dashboard file not found: {html_path}")
+            print(f"[Error] Visualizer directory not found: {vis_dir}")
 
     else:
         parser.print_help()
