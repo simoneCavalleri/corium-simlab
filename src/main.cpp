@@ -10,6 +10,7 @@
 using namespace corium_sim;
 using namespace corium_sim::math;
 using namespace corium_sim::renderer;
+using namespace corium_sim::kinematics;
 
 int main(int argc, char** argv)
 {
@@ -25,7 +26,7 @@ int main(int argc, char** argv)
 
     runtime.initialize(app);
 
-    // Build custom 3D Agent Simulation Environment with PBR Materials via Fluent C++ SceneBuilder API
+    // Build custom 3D Agent Simulation Environment with Articulated Robot Arm Joints
     WGPUDevice device = app.renderer().device();
     WGPUQueue queue = app.renderer().queue();
 
@@ -38,7 +39,39 @@ int main(int argc, char** argv)
                 Vec3{0.0f, 0.0f, 0.0f},
                 Vec3{1.0f, 1.0f, 1.0f},
                 Vec3{0.0f, 0.0f, 0.0f},
-                Material::Metallic({0.90f, 0.92f, 0.95f, 1.0f}, 0.20f) // Metallic Chrome Robot
+                Material::Metallic({0.90f, 0.92f, 0.95f, 1.0f}, 0.20f) // Metallic Chrome Base Robot
+            )
+            .addCube(
+                "arm_link1",
+                Vec3{0.0f, 1.2f, 0.0f},
+                Vec3{0.4f, 1.5f, 0.4f},
+                Vec3{0.0f, 0.0f, 0.0f},
+                Material::Glossy({0.2f, 0.8f, 0.3f, 1.0f}) // Green Upper Arm Link
+            )
+            .addCube(
+                "arm_link2",
+                Vec3{0.0f, 2.5f, 0.0f},
+                Vec3{0.3f, 1.2f, 0.3f},
+                Vec3{0.0f, 0.0f, 0.0f},
+                Material::Glossy({0.9f, 0.5f, 0.1f, 1.0f}) // Orange Forearm Link
+            )
+            .addJoint(
+                "joint_shoulder",
+                "agent_robot",
+                "arm_link1",
+                JointType::Revolute,
+                Vec3{0.0f, 1.0f, 0.0f},  // Anchor point at top of base
+                Vec3{0.0f, 1.0f, 0.0f},  // Yaw rotation axis
+                -3.14159f, 3.14159f
+            )
+            .addJoint(
+                "joint_elbow",
+                "arm_link1",
+                "arm_link2",
+                JointType::Revolute,
+                Vec3{0.0f, 1.5f, 0.0f},  // Anchor point at elbow
+                Vec3{1.0f, 0.0f, 0.0f},  // Pitch rotation axis
+                -1.5708f, 1.5708f
             )
             .addCube(
                 "target_goal",
@@ -53,13 +86,6 @@ int main(int argc, char** argv)
                 1.0f,
                 Vec3{1.0f, 1.0f, 1.0f},
                 Material::Matte({0.2f, 0.7f, 0.9f, 1.0f}) // Matte Cyan Obstacle
-            )
-            .addPyramid(
-                "marker_flag",
-                Vec3{-4.0f, 0.0f, -4.0f},
-                1.2f,
-                2.0f,
-                Material::Glossy({0.95f, 0.8f, 0.1f, 1.0f}) // Glossy Gold Marker Flag
             )
             .build();
 

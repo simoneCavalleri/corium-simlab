@@ -10,6 +10,7 @@ SimScene::~SimScene()
 
 SimScene::SimScene(SimScene&& rhs) noexcept
     : _entities(std::move(rhs._entities))
+    , _joints(std::move(rhs._joints))
 {
 }
 
@@ -18,6 +19,7 @@ SimScene& SimScene::operator=(SimScene&& rhs) noexcept
     if (this != &rhs) {
         destroy();
         _entities = std::move(rhs._entities);
+        _joints = std::move(rhs._joints);
     }
     return *this;
 }
@@ -32,6 +34,11 @@ void SimScene::addEntity(SimEntity entity)
     _entities.push_back(std::move(entity));
 }
 
+void SimScene::addJoint(kinematics::SimJoint joint)
+{
+    _joints.push_back(std::move(joint));
+}
+
 void SimScene::destroy() noexcept
 {
     for (auto& entity : _entities) {
@@ -39,6 +46,7 @@ void SimScene::destroy() noexcept
         entity.texture.destroy();
     }
     _entities.clear();
+    _joints.clear();
 }
 
 SimEntity* SimScene::findEntity(const std::string& name) noexcept
@@ -53,6 +61,14 @@ SimEntity* SimScene::getEntity(uint32_t id) noexcept
 {
     for (auto& entity : _entities) {
         if (entity.id == id) return &entity;
+    }
+    return nullptr;
+}
+
+kinematics::SimJoint* SimScene::findJoint(const std::string& name) noexcept
+{
+    for (auto& joint : _joints) {
+        if (joint.name == name) return &joint;
     }
     return nullptr;
 }

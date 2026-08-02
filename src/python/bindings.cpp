@@ -50,7 +50,27 @@ PYBIND11_MODULE(corium_sim_py, m) {
         .def_static("Matte", &Material::Matte, py::arg("color"))
         .def_static("Glossy", &Material::Glossy, py::arg("color"));
 
-    // 3. SimEntity & SimScene Bindings
+    // 3. Joint Kinematics Bindings
+    py::enum_<kinematics::JointType>(m, "JointType")
+        .value("Revolute", kinematics::JointType::Revolute)
+        .value("Prismatic", kinematics::JointType::Prismatic)
+        .value("Fixed", kinematics::JointType::Fixed);
+
+    py::class_<kinematics::SimJoint>(m, "SimJoint")
+        .def(py::init<>())
+        .def_readwrite("id", &kinematics::SimJoint::id)
+        .def_readwrite("name", &kinematics::SimJoint::name)
+        .def_readwrite("parent_name", &kinematics::SimJoint::parentName)
+        .def_readwrite("child_name", &kinematics::SimJoint::childName)
+        .def_readwrite("type", &kinematics::SimJoint::type)
+        .def_readwrite("anchor", &kinematics::SimJoint::anchor)
+        .def_readwrite("axis", &kinematics::SimJoint::axis)
+        .def_readwrite("position", &kinematics::SimJoint::position)
+        .def_readwrite("min_limit", &kinematics::SimJoint::minLimit)
+        .def_readwrite("max_limit", &kinematics::SimJoint::maxLimit)
+        .def_readwrite("target_velocity", &kinematics::SimJoint::targetVelocity);
+
+    // 4. SimEntity & SimScene Bindings
     py::class_<SimEntity>(m, "SimEntity")
         .def(py::init<>())
         .def_readwrite("id", &SimEntity::id)
@@ -74,6 +94,11 @@ PYBIND11_MODULE(corium_sim_py, m) {
     py::class_<SimLabApp>(m, "SimLabApp")
         .def(py::init<>())
         .def("reset", &SimLabApp::resetEnvironment)
+        .def("set_joint_position", [](SimLabApp& self, const std::string& name, float pos) {
+            if (auto* j = self.scene().findJoint(name)) {
+                j->position = pos;
+            }
+        }, py::arg("joint_name"), py::arg("position"))
         .def("get_sensor_frame", [](SimLabApp& self) {
             auto pixels = self.renderer().readOffscreenPixels(self.renderer().createOffscreenTarget(128, 128));
             uint32_t w = self.sensorCamera().width();

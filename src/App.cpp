@@ -120,6 +120,14 @@ void SimLabApp::onRegisterHandlers()
         resetEnvironment();
     });
 
+    // Handler for Agent Joint Commands
+    on([this](const AgentJointCommand& cmd) {
+        if (auto* joint = _scene.findJoint(cmd.jointName)) {
+            joint->position = cmd.targetPosition;
+            joint->targetVelocity = cmd.targetVelocity;
+        }
+    });
+
     // Handler for Simulation Physics / Logic Step Events
     on([this](const SimStepEvent& evt) {
         _simStepCount++;
@@ -205,8 +213,9 @@ void SimLabApp::onRender(double deltaTime)
         );
     }
 
-    // 1. Advance Physics Engine Simulation Step
+    // 1. Advance Physics Engine & Joint Kinematics Simulation Step
     _physicsEngine.step(_scene, dt);
+    _jointKinematics.updateKinematics(_scene, dt);
     _simStepCount++;
 
     // 2. Evaluate Agent State & Dense Rewards

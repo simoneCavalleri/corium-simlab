@@ -14,6 +14,8 @@
 #include <corium/ui/WindowApp.hpp>
 #include <corium/ui/backends/GlfwWindowBackend.hpp>
 
+#include "corium_sim/kinematics/JointKinematics.hpp"
+
 namespace corium_sim {
 
 // Runtime configuration using DefaultSimEvents
@@ -53,6 +55,7 @@ public:
     [[nodiscard]] scene::SimScene& scene() noexcept { return _scene; }
     [[nodiscard]] const scene::SimScene& scene() const noexcept { return _scene; }
     [[nodiscard]] physics::PhysicsEngine& physics() noexcept { return _physicsEngine; }
+    [[nodiscard]] kinematics::JointKinematics& jointKinematics() noexcept { return _jointKinematics; }
 
 private:
     renderer::WebGpuBackend _gpuBackend{};
@@ -62,6 +65,7 @@ private:
 
     scene::SimScene _scene{};
     physics::PhysicsEngine _physicsEngine{};
+    kinematics::JointKinematics _jointKinematics{};
 
     uint32_t _renderFramesCount = 0;
     uint64_t _simStepCount = 0;

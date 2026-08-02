@@ -75,6 +75,13 @@ struct SensorFrameEvent {
     std::vector<uint8_t> rgbData{};
 };
 
+/// @brief Event posted to set an articulated joint position or velocity target.
+struct AgentJointCommand {
+    std::string jointName{};
+    float targetPosition = 0.0f;
+    float targetVelocity = 0.0f;
+};
+
 /// @brief Combined default variant list of core Corium events, UI events, and Simulation events.
 using DefaultSimEvents = std::variant<
     corium::QuitEvent,
@@ -104,7 +111,8 @@ using DefaultSimEvents = std::variant<
     SimResetEvent,
     AgentActionCommand,
     AgentObservationEvent,
-    SensorFrameEvent
+    SensorFrameEvent,
+    AgentJointCommand
 >;
 
 } // namespace corium_sim

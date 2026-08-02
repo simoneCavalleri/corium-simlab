@@ -12,13 +12,14 @@
 #include "webgpu.h"
 #endif
 
+#include "corium_sim/kinematics/SimJoint.hpp"
 #include "corium_sim/scene/SimEntity.hpp"
 
 namespace corium_sim::scene {
 
 class SceneBuilder; // Forward declaration
 
-/// @brief Container for 3D Agent Simulation Scenes managing entities, meshes, and WebGPU resources.
+/// @brief Container for 3D Agent Simulation Scenes managing entities, joints, and WebGPU resources.
 class SimScene {
 public:
     SimScene() = default;
@@ -36,6 +37,9 @@ public:
     /// @brief Add entity to scene.
     void addEntity(SimEntity entity);
 
+    /// @brief Add articulated joint to scene.
+    void addJoint(kinematics::SimJoint joint);
+
     /// @brief Destroy and release GPU resources of all entities in scene.
     void destroy() noexcept;
 
@@ -45,6 +49,9 @@ public:
     /// @brief Find entity by ID.
     [[nodiscard]] SimEntity* getEntity(uint32_t id) noexcept;
 
+    /// @brief Find articulated joint by name.
+    [[nodiscard]] kinematics::SimJoint* findJoint(const std::string& name) noexcept;
+
     /// @brief Calculate combined AABB bounding box for the entire scene.
     [[nodiscard]] renderer::BoundingBox sceneBounds() const noexcept;
 
@@ -52,8 +59,13 @@ public:
     [[nodiscard]] std::vector<SimEntity>& entities() noexcept { return _entities; }
     [[nodiscard]] std::size_t entityCount() const noexcept { return _entities.size(); }
 
+    [[nodiscard]] const std::vector<kinematics::SimJoint>& joints() const noexcept { return _joints; }
+    [[nodiscard]] std::vector<kinematics::SimJoint>& joints() noexcept { return _joints; }
+    [[nodiscard]] std::size_t jointCount() const noexcept { return _joints.size(); }
+
 private:
     std::vector<SimEntity> _entities{};
+    std::vector<kinematics::SimJoint> _joints{};
 };
 
 } // namespace corium_sim::scene

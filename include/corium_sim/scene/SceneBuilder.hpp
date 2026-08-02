@@ -65,6 +65,18 @@ public:
     /// @brief Add a custom pre-constructed entity to the scene.
     SceneBuilder& addEntity(SimEntity entity);
 
+    /// @brief Add an articulated joint connecting parent and child link entities.
+    SceneBuilder& addJoint(
+        std::string name,
+        std::string parentName,
+        std::string childName,
+        kinematics::JointType type = kinematics::JointType::Revolute,
+        const math::Vec3& anchor = {0.0f, 0.0f, 0.0f},
+        const math::Vec3& axis = {0.0f, 1.0f, 0.0f},
+        float minLimit = -3.14159f,
+        float maxLimit =  3.14159f
+    );
+
     /// @brief Finalize and build the completed SimScene environment.
     [[nodiscard]] SimScene build();
 

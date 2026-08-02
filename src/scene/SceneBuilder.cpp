@@ -145,6 +145,32 @@ SceneBuilder& SceneBuilder::addEntity(SimEntity entity)
     return *this;
 }
 
+SceneBuilder& SceneBuilder::addJoint(
+    std::string name,
+    std::string parentName,
+    std::string childName,
+    kinematics::JointType type,
+    const Vec3& anchor,
+    const Vec3& axis,
+    float minLimit,
+    float maxLimit
+)
+{
+    kinematics::SimJoint joint{};
+    joint.id = _nextEntityId++;
+    joint.name = std::move(name);
+    joint.parentName = std::move(parentName);
+    joint.childName = std::move(childName);
+    joint.type = type;
+    joint.anchor = anchor;
+    joint.axis = axis;
+    joint.minLimit = minLimit;
+    joint.maxLimit = maxLimit;
+
+    _scene.addJoint(std::move(joint));
+    return *this;
+}
+
 SimScene SceneBuilder::build()
 {
     std::cout << "[SceneBuilder] Finalized 3D simulation environment scene with "
