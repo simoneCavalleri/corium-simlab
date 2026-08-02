@@ -7,6 +7,7 @@
 #include <corium/ui/WindowEvents.hpp>
 
 #include <vector>
+#include <corium/logging/logging.hpp>
 
 namespace corium_sim {
 
@@ -112,7 +113,8 @@ using DefaultSimEvents = std::variant<
     AgentActionCommand,
     AgentObservationEvent,
     SensorFrameEvent,
-    AgentJointCommand
+    AgentJointCommand,
+    corium::logging::LogEvent
 >;
 
 } // namespace corium_sim

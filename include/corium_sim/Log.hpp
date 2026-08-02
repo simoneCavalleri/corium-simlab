@@ -1,70 +1,60 @@
 #pragma once
 
 // =============================================================================
-// Corium SimLab — Structured Logging with Level Filtering
+// Corium SimLab — Integrated Corium Logging Adapter
+// Connects engine logging directly to Corium's zero-heap logging framework
+// (corium::logging::ConsoleLogger & corium::logging::LogEvent).
 // =============================================================================
 
-#include <cstdint>
-#include <iostream>
+#include <corium/logging/logging.hpp>
+#include <sstream>
 #include <string_view>
+#include <utility>
 
 namespace corium_sim {
 
-/// @brief Log severity level for structured log output.
-enum class LogLevel : uint8_t {
-    Debug = 0,
-    Info  = 1,
-    Warn  = 2,
-    Error = 3
-};
+/// @brief Re-export Corium's LogLevel enum for seamless integration.
+using LogLevel = corium::logging::LogLevel;
 
 namespace detail {
 
-/// @brief Runtime minimum log level (default: Info in Release, Debug in Debug builds).
-inline LogLevel& minLogLevel() noexcept
+/// @brief Global ConsoleLogger instance using Corium's logging service.
+inline corium::logging::ConsoleLogger& getConsoleLogger() noexcept
 {
-#ifdef NDEBUG
-    static LogLevel level = LogLevel::Info;
-#else
-    static LogLevel level = LogLevel::Debug;
-#endif
-    return level;
-}
-
-inline constexpr const char* levelPrefix(LogLevel level) noexcept
-{
-    switch (level) {
-        case LogLevel::Debug: return "\033[90m[DEBUG]\033[0m";
-        case LogLevel::Info:  return "\033[36m[INFO]\033[0m ";
-        case LogLevel::Warn:  return "\033[33m[WARN]\033[0m ";
-        case LogLevel::Error: return "\033[31m[ERROR]\033[0m";
-    }
-    return "[???]";
+    static corium::logging::ConsoleLogger logger{"SimLab"};
+    return logger;
 }
 
 template <typename... Args>
-inline void log(LogLevel level, std::string_view tag, Args&&... args)
+inline void log(corium::logging::LogLevel level, const char* tag, Args&&... args)
 {
-    if (level < minLogLevel()) return;
+    auto& logger = getConsoleLogger();
+    logger.setCategory(tag);
 
-    auto& stream = (level >= LogLevel::Error) ? std::cerr : std::cout;
-    stream << levelPrefix(level) << " [" << tag << "] ";
-    (stream << ... << std::forward<Args>(args));
-    stream << '\n';
+    if constexpr (sizeof...(Args) == 1 && std::is_convertible_v<std::tuple_element_t<0, std::tuple<Args...>>, const char*>) {
+        logger.log(level, "%s", args...);
+    } else {
+        std::ostringstream ss;
+        (ss << ... << std::forward<Args>(args));
+        std::string str = ss.str();
+        logger.log(level, "%s", str.c_str());
+    }
 }
 
 } // namespace detail
 
-/// @brief Set the runtime minimum log level filter.
-inline void setLogLevel(LogLevel level) noexcept
+/// @brief Set minimum log severity level on Corium's logging service.
+inline void setLogLevel(corium::logging::LogLevel level) noexcept
 {
-    detail::minLogLevel() = level;
+    detail::getConsoleLogger().setMinLevel(level);
 }
 
 } // namespace corium_sim
 
-// Convenience macros for structured logging with variadic arguments
-#define CORIUM_LOG_DEBUG(tag, ...) ::corium_sim::detail::log(::corium_sim::LogLevel::Debug, tag, __VA_ARGS__)
-#define CORIUM_LOG_INFO(tag, ...)  ::corium_sim::detail::log(::corium_sim::LogLevel::Info,  tag, __VA_ARGS__)
-#define CORIUM_LOG_WARN(tag, ...)  ::corium_sim::detail::log(::corium_sim::LogLevel::Warn,  tag, __VA_ARGS__)
-#define CORIUM_LOG_ERROR(tag, ...) ::corium_sim::detail::log(::corium_sim::LogLevel::Error, tag, __VA_ARGS__)
+// Convenience macros mapping directly to Corium's zero-heap logging service
+#define CORIUM_LOG_TRACE(tag, ...) ::corium_sim::detail::log(::corium::logging::LogLevel::Trace, tag, __VA_ARGS__)
+#define CORIUM_LOG_DEBUG(tag, ...) ::corium_sim::detail::log(::corium::logging::LogLevel::Debug, tag, __VA_ARGS__)
+#define CORIUM_LOG_INFO(tag, ...)  ::corium_sim::detail::log(::corium::logging::LogLevel::Info,  tag, __VA_ARGS__)
+#define CORIUM_LOG_WARN(tag, ...)  ::corium_sim::detail::log(::corium::logging::LogLevel::Warn,  tag, __VA_ARGS__)
+#define CORIUM_LOG_ERROR(tag, ...) ::corium_sim::detail::log(::corium::logging::LogLevel::Error, tag, __VA_ARGS__)
+#define CORIUM_LOG_CRITICAL(tag, ...) ::corium_sim::detail::log(::corium::logging::LogLevel::Critical, tag, __VA_ARGS__)
