@@ -1,7 +1,5 @@
 // =============================================================================
-// Corium SimLab — Real-Time Agent Simulation Engine & WebGPU Visualizer
-//
-// Standalone Application Entry Point & Realistic Industrial Workstation Exemplar
+// Corium SimLab Sample #02 — Realistic Industrial Robotics Workstation & 3-DOF Arm
 // =============================================================================
 
 #include "corium_sim/App.hpp"
@@ -18,7 +16,7 @@ int main(int argc, char** argv)
     (void)argv;
 
     std::cout << "=========================================================\n";
-    std::cout << " Corium SimLab Engine v1.2.0 (Industrial Robotics Simulation)\n";
+    std::cout << " Corium SimLab Sample #02: Industrial Robotic Manipulator Workstation\n";
     std::cout << "=========================================================\n\n";
 
     SimRuntime runtime;
@@ -31,7 +29,7 @@ int main(int argc, char** argv)
 
     if (device && queue) {
         auto envScene = scene::SimScene::builder(device, queue)
-            // 1. Factory Concrete Floor Grid
+            // 1. Concrete Factory Floor Grid
             .addGroundGrid(60.0f, 60.0f, 60)
 
             // 2. Heavy Industrial Pedestal Table Workstation
@@ -43,7 +41,7 @@ int main(int argc, char** argv)
                 Material::Metallic({0.4f, 0.45f, 0.50f, 1.0f}, 0.35f) // Cast Iron Table Base
             )
 
-            // 3. Robotic Manipulator Base
+            // 3. Robotic Manipulator Pedestal Base
             .addModel(
                 "agent_robot",
                 "assets/models/sample_robot.obj",
@@ -98,7 +96,7 @@ int main(int argc, char** argv)
                 "agent_robot",
                 "shoulder_link",
                 JointType::Revolute,
-                Vec3{0.0f, 0.6f, 0.0f},
+                Vec3{0.0f, 0.6f, 0.0f},  // Yaw rotation around vertical Z/Y
                 Vec3{0.0f, 1.0f, 0.0f},
                 -3.14159f, 3.14159f
             )
@@ -107,7 +105,7 @@ int main(int argc, char** argv)
                 "shoulder_link",
                 "elbow_link",
                 JointType::Revolute,
-                Vec3{0.0f, 0.9f, 0.0f},
+                Vec3{0.0f, 0.9f, 0.0f},  // Pitch rotation around X axis
                 Vec3{1.0f, 0.0f, 0.0f},
                 -2.0944f, 2.0944f
             )
@@ -116,12 +114,30 @@ int main(int argc, char** argv)
                 "elbow_link",
                 "wrist_link",
                 JointType::Revolute,
-                Vec3{0.0f, 0.6f, 0.0f},
+                Vec3{0.0f, 0.6f, 0.0f},  // Wrist roll around Y axis
                 Vec3{0.0f, 1.0f, 0.0f},
                 -3.14159f, 3.14159f
             )
+            .addJoint(
+                "joint_gripper_l",
+                "wrist_link",
+                "gripper_finger_l",
+                JointType::Prismatic,
+                Vec3{-0.15f, 0.3f, 0.0f}, // Linear slide inwards/outwards
+                Vec3{-1.0f, 0.0f, 0.0f},
+                0.0f, 0.1f
+            )
+            .addJoint(
+                "joint_gripper_r",
+                "wrist_link",
+                "gripper_finger_r",
+                JointType::Prismatic,
+                Vec3{0.15f, 0.3f, 0.0f},
+                Vec3{1.0f, 0.0f, 0.0f},
+                0.0f, 0.1f
+            )
 
-            // 7. Workpiece Inspection Platform & Anodized Red Metal Target Workpiece
+            // 7. Workpiece Inspection Platform & Red Metallic Target Block
             .addCube(
                 "inspection_platform",
                 Vec3{3.5f, 0.5f, -1.5f},
@@ -134,7 +150,7 @@ int main(int argc, char** argv)
                 Vec3{3.5f, 1.25f, -1.5f},
                 Vec3{0.6f, 0.5f, 0.6f},
                 Vec3{0.0f, 0.0f, 0.0f},
-                Material::Metallic({0.95f, 0.10f, 0.15f, 1.0f}, 0.10f) // Anodized Red Target
+                Material::Metallic({0.95f, 0.10f, 0.15f, 1.0f}, 0.10f) // Anodized Red Metal Workpiece Target
             )
 
             // 8. Industrial Safety Warning Barrier
@@ -152,7 +168,5 @@ int main(int argc, char** argv)
 
     app.run(runtime);
     runtime.shutdown();
-
-    std::cout << "\nCorium SimLab exited successfully.\n";
     return 0;
 }

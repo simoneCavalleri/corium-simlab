@@ -98,3 +98,10 @@ if(BUILD_PYTHON_BINDINGS)
         "$<TARGET_FILE_DIR:corium_sim_py>"
     )
 endif()
+
+# 5. Build Samples Directory Targets
+option(BUILD_SAMPLES "Build C++ Samples" ON)
+
+if(BUILD_SAMPLES)
+    add_subdirectory(samples/cpp)
+endif()
