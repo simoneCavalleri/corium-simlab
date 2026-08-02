@@ -21,6 +21,9 @@ def main():
     run_parser = subparsers.add_parser("run", help="Run a Corium SimLab sample script (1-6)")
     run_parser.add_argument("sample", type=int, choices=range(1, 7), help="Sample number (1 to 6)")
 
+    # Command: visualizer
+    vis_parser = subparsers.add_parser("visualizer", help="Launch live Web Telemetry & 3D LiDAR Visualizer Dashboard in browser")
+
     args = parser.parse_args()
 
     if args.command == "info":
@@ -73,6 +76,15 @@ def main():
             os.system(f"python3 {sample_path}")
         else:
             print(f"[Error] Sample file not found: {sample_path}")
+
+    elif args.command == "visualizer":
+        html_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "tools", "visualizer", "index.html"))
+        if os.path.exists(html_path):
+            import webbrowser
+            print(f"[Corium SimLab CLI] Opening Web Telemetry Visualizer Dashboard: file://{html_path}")
+            webbrowser.open(f"file://{html_path}")
+        else:
+            print(f"[Error] Visualizer dashboard file not found: {html_path}")
 
     else:
         parser.print_help()
