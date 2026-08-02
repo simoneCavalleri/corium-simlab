@@ -3,64 +3,78 @@
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Runtime: Corium](https://img.shields.io/badge/Runtime-Corium%20MPSC-green.svg)](https://github.com/simoneCavalleri/corium)
+[![Python: Gymnasium](https://img.shields.io/badge/Python-Gymnasium-brightgreen.svg)](python/)
 
-**Corium SimLab** is a high-performance standalone simulation application and WebGPU real-time rendering engine built on top of the [Corium](https://github.com/simoneCavalleri/corium) MPSC event-driven architecture.
+**Corium SimLab** is a high-performance 3D agent simulation environment and WebGPU real-time rendering engine built on top of the [Corium](https://github.com/simoneCavalleri/corium) zero-heap MPSC event-driven architecture.
 
-Designed for digital twins, autonomous agent simulation, robotics telemetry, and high-frequency real-time spatial visualization.
-
----
-
-## Architecture & Design
-
-- **Modular C++20 Architecture**: Clean separation between interface headers (`include/corium_sim/`) and compiled C++ implementations (`src/`).
-- **Zero Dynamic Heap Allocations**: Main event loop and event queues execute with zero heap allocation overhead.
-- **Lock-Free MPSC Telemetry Stream**: High-frequency background thread producers (ROS2, TCP/UDP sockets, physics solvers) stream data into the main render queue without mutex contention.
-- **Native WebGPU Graphics Engine**: Native WebGPU rendering backend (`wgpu-native`) with GLFW windowing and Wayland / X11 native surface creation.
+Designed for Reinforcement Learning (RL), digital twins, robotic manipulators, autonomous agents, and high-frequency spatial vision sensors.
 
 ---
 
-## Directory Layout
+## Architecture & Features
+
+- **PBR Cook-Torrance WGSL Shading**: Physically Based Rendering (GGX microfacet BRDF) with metallic, roughness, albedo, and emissive material parameters.
+- **Offscreen WebGPU Vision Sensors**: 256-byte aligned staging buffer CPU readback for extracting raw RGBA visual frames for PyTorch / NumPy RL policies.
+- **Forward Kinematics & Articulated Bodies**: Revolute, Prismatic, and Fixed joint support for multi-link robotic arms and manipulators.
+- **Fluent C++ SceneBuilder API**: Zero-overhead programmatic 3D scene construction (`.addGroundGrid()`, `.addCube()`, `.addSphere()`, `.addModel()`, `.addJoint()`).
+- **Python Gymnasium Interface (`pybind11`)**: Native C++ extension module (`corium_sim_py`) providing standard Gymnasium `CoriumEnv` (`reset()`, `step(action)`).
+
+---
+
+## Project Organization
 
 ```text
 corium-simlab/
+├── assets/                          # 3D Mesh Models and Textures
 ├── include/
-│   └── corium_sim/
-│       ├── App.hpp                  # SimLabApp product application class
-│       ├── events/
-│       │   └── SimEvents.hpp        # Telemetry, Camera, SimStep events
-│       ├── renderer/
-│       │   └── WebGpuBackend.hpp    # WebGPU backend declaration
-│       └── services/
-│           └── TelemetryService.hpp # Background telemetry streaming service
-├── src/
-│   ├── main.cpp                     # Standalone main executable entry point
-│   ├── App.cpp                      # SimLabApp implementation
+│   └── corium_sim/                  # Public C++ Engine Headers
+│       ├── kinematics/              # JointKinematics & SimJoint definitions
+│       ├── physics/                 # 3D Rigid Body Physics Solver
+│       ├── renderer/                # WebGPU Renderer, PBR Materials, SensorCamera
+│       ├── scene/                   # SimScene & Fluent SceneBuilder API
+│       ├── App.hpp                  # SimLabApp core application class
+│       └── SimLab.hpp               # Single umbrella header inclusion
+├── python/
+│   └── corium_sim/                  # Python Gymnasium Environment Package
+├── samples/                         # Standalone Executable & Script Samples
+│   ├── cpp/
+│   │   ├── 01_basic_environment.cpp
+│   │   └── 02_robotic_arm_manipulator.cpp
+│   └── python/
+│       ├── 01_gym_environment.py
+│       └── 02_robot_joint_control.py
+├── src/                             # C++ Core Implementations (.cpp)
+│   ├── kinematics/
+│   ├── physics/
+│   ├── python/                      # pybind11 C++ bindings
 │   ├── renderer/
-│   │   └── WebGpuBackend.cpp        # WebGPU pipeline implementation
-│   └── services/
-│       └── TelemetryService.cpp    # Telemetry service implementation
+│   └── scene/
 └── CMakeLists.txt
 ```
 
 ---
 
-## Build & Run
+## Quickstart & Build Instructions
+
+### C++ Samples & Library Build
 
 ```bash
-# Configure build using CMake
-cmake -B build
+# Configure project with C++ samples and Python bindings enabled
+cmake -B build -DCORIUM_LOCAL_PATH=/home/simone/dev/corium -DBUILD_SAMPLES=ON -DBUILD_PYTHON_BINDINGS=ON
 
-# Build standalone executable (corium-simlab)
+# Compile library and samples
 cmake --build build
 
-# Run application
-LD_LIBRARY_PATH=./build:_deps/wgpu_native-src ./build/corium-simlab
+# Run C++ Realistic Industrial Robotic Manipulator Sample
+./build/samples/cpp/sample_02_robotic_arm_manipulator
 ```
 
-### Local Corium Development
+### Python Gymnasium Environment Sample
 
 ```bash
-cmake -B build -DCORIUM_LOCAL_PATH=../corium
-cmake --build build
-LD_LIBRARY_PATH=./build:_deps/wgpu_native-src ./build/corium-simlab
+# Run Python Gymnasium Environment loop demo
+python3 samples/python/01_gym_environment.py
+
+# Run Python Robotic Joint Control & Offscreen Sensor sample
+python3 samples/python/02_robot_joint_control.py
 ```

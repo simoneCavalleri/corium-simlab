@@ -11,7 +11,7 @@ set(CORIUM_LOCAL_PATH "" CACHE PATH "Path to local Corium repository")
 
 include(FetchContent)
 
-# 1. Fetch / Include Corium
+# 1. Fetch / Include Corium Engine Core
 if(CORIUM_LOCAL_PATH AND EXISTS ${CORIUM_LOCAL_PATH})
     message(STATUS "Using local Corium path: ${CORIUM_LOCAL_PATH}")
     add_subdirectory(${CORIUM_LOCAL_PATH} corium_build EXCLUDE_FROM_ALL)
@@ -25,7 +25,7 @@ else()
     FetchContent_MakeAvailable(corium)
 endif()
 
-# 2. Fetch GLFW for Windowing
+# 2. Fetch GLFW for Windowing & Native Display Surface
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
@@ -47,7 +47,7 @@ FetchContent_MakeAvailable(wgpu_native)
 # Locate wgpu_native library
 find_library(WGPU_NATIVE_LIB NAMES wgpu_native libwgpu_native.so PATHS ${wgpu_native_SOURCE_DIR} NO_DEFAULT_PATH)
 
-# Engine Core Static Library (separating headers from .cpp implementations)
+# Engine Core Static Library (corium_sim_core)
 add_library(corium_sim_core STATIC
     src/renderer/Camera.cpp
     src/renderer/Mesh.cpp
@@ -64,17 +64,6 @@ add_library(corium_sim_core STATIC
 
 target_include_directories(corium_sim_core PUBLIC include ${wgpu_native_SOURCE_DIR})
 target_link_libraries(corium_sim_core PUBLIC corium glfw ${WGPU_NATIVE_LIB})
-
-# Main Application Executable (corium-simlab)
-add_executable(corium-simlab src/main.cpp)
-target_link_libraries(corium-simlab PRIVATE corium_sim_core)
-
-# Ensure libwgpu_native.so is copied next to the final executable
-add_custom_command(TARGET corium-simlab POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${wgpu_native_SOURCE_DIR}/libwgpu_native.so"
-    "$<TARGET_FILE_DIR:corium-simlab>"
-)
 
 # 4. Optional Python C++ Extension Binding (pybind11)
 option(BUILD_PYTHON_BINDINGS "Build Python C++ Extension module" ON)
@@ -99,7 +88,7 @@ if(BUILD_PYTHON_BINDINGS)
     )
 endif()
 
-# 5. Build Samples Directory Targets
+# 5. Build C++ Samples Directory Targets
 option(BUILD_SAMPLES "Build C++ Samples" ON)
 
 if(BUILD_SAMPLES)
