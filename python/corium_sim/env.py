@@ -35,6 +35,16 @@ class CoriumEnv:
         self._step_count = 0
         self._max_steps = max_steps
         self._sim_dt = sim_dt
+        self.action_space_shape = (3,)
+        self.observation_space_shape = (9,)
+
+    @property
+    def action_space(self):
+        return {"shape": self.action_space_shape, "dtype": "float32"}
+
+    @property
+    def observation_space(self):
+        return {"shape": self.observation_space_shape, "dtype": "float32"}
 
     def reset(self, seed: int = None, options: dict = None):
         self._step_count = 0
@@ -93,3 +103,7 @@ class CoriumEnv:
             "vector": vector_obs,
             "rgb": rgb_frame
         }
+
+    def close(self):
+        """Clean up environment resources."""
+        pass

@@ -1,4 +1,4 @@
 from .env import CoriumEnv
+from .vec_env import VectorEnv
 
-__version__ = "1.2.0"
-__all__ = ["CoriumEnv"]
+__all__ = ["CoriumEnv", "VectorEnv"]
