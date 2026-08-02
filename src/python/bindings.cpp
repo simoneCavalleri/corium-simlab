@@ -2,6 +2,8 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
+#include <fstream>
+
 #include "corium_sim/App.hpp"
 #include "corium_sim/SimConfig.hpp"
 #include "corium_sim/math/Math.hpp"
@@ -110,6 +112,49 @@ PYBIND11_MODULE(corium_sim_py, m) {
         .def_property("config",
             [](SimLabApp& self) -> SimConfig& { return self.config(); },
             [](SimLabApp& self, const SimConfig& cfg) { self.setConfig(cfg); })
+        .def("setup_default_scene", [](SimLabApp& self) {
+            if (!self.renderer().isInitialized()) {
+                self.renderer().initialize(nullptr, 1280, 720);
+            }
+            WGPUDevice device = self.renderer().device();
+            WGPUQueue queue = self.renderer().queue();
+            self.setScene(
+                scene::SimScene::builder(device, queue)
+                    .addGroundGrid(50.0f, 50.0f, 50)
+                    .addModel("agent_robot", "assets/models/sample_robot.obj", Vec3{0.0f, 0.0f, 0.0f})
+                    .addCube("target_goal", Vec3{4.0f, 0.75f, -2.0f}, Vec3{1.2f, 1.2f, 1.2f})
+                    .addSphere("obstacle_ball", Vec3{-3.0f, 1.0f, 2.0f}, 1.0f)
+                    .build()
+            );
+        }, "Set up the default 3D RL environment scene (ground grid, agent, target, obstacle).")
+        .def("setup_robotic_arm_scene", [](SimLabApp& self) {
+            if (!self.renderer().isInitialized()) {
+                self.renderer().initialize(nullptr, 1280, 720);
+            }
+            WGPUDevice device = self.renderer().device();
+            WGPUQueue queue = self.renderer().queue();
+            self.setScene(
+                scene::SimScene::builder(device, queue)
+                    .addGroundGrid(60.0f, 60.0f, 60)
+                    .addCube("workstation_table", Vec3{0.0f, 0.4f, 0.0f}, Vec3{3.0f, 0.8f, 2.0f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Metallic({0.4f, 0.45f, 0.50f, 1.0f}, 0.35f), true)
+                    .addModel("agent_robot", "assets/models/sample_robot.obj", Vec3{0.0f, 0.8f, 0.0f}, Vec3{0.8f, 0.8f, 0.8f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Metallic({0.95f, 0.95f, 0.98f, 1.0f}, 0.15f), true)
+                    .addCube("shoulder_link", Vec3{0.0f, 1.4f, 0.0f}, Vec3{0.4f, 1.0f, 0.4f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Glossy({0.15f, 0.55f, 0.95f, 1.0f}))
+                    .addCube("elbow_link", Vec3{0.0f, 2.3f, 0.0f}, Vec3{0.3f, 0.8f, 0.3f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Glossy({0.95f, 0.85f, 0.10f, 1.0f}))
+                    .addCube("wrist_link", Vec3{0.0f, 2.9f, 0.0f}, Vec3{0.25f, 0.4f, 0.25f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Metallic({0.85f, 0.88f, 0.90f, 1.0f}, 0.25f))
+                    .addCube("gripper_finger_l", Vec3{-0.15f, 3.2f, 0.0f}, Vec3{0.08f, 0.3f, 0.12f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Matte({0.2f, 0.2f, 0.25f, 1.0f}))
+                    .addCube("gripper_finger_r", Vec3{0.15f, 3.2f, 0.0f}, Vec3{0.08f, 0.3f, 0.12f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Matte({0.2f, 0.2f, 0.25f, 1.0f}))
+                    .addJoint("joint_shoulder_yaw", "agent_robot", "shoulder_link", kinematics::JointType::Revolute, Vec3{0.0f, 0.6f, 0.0f}, Vec3{0.0f, 1.0f, 0.0f}, -3.14159f, 3.14159f)
+                    .addJoint("joint_elbow_pitch", "shoulder_link", "elbow_link", kinematics::JointType::Revolute, Vec3{0.0f, 0.9f, 0.0f}, Vec3{1.0f, 0.0f, 0.0f}, -2.0944f, 2.0944f)
+                    .addJoint("joint_wrist_roll", "elbow_link", "wrist_link", kinematics::JointType::Revolute, Vec3{0.0f, 0.6f, 0.0f}, Vec3{0.0f, 1.0f, 0.0f}, -3.14159f, 3.14159f)
+                    .addJoint("joint_gripper_l", "wrist_link", "gripper_finger_l", kinematics::JointType::Prismatic, Vec3{-0.15f, 0.3f, 0.0f}, Vec3{-1.0f, 0.0f, 0.0f}, 0.0f, 0.1f)
+                    .addJoint("joint_gripper_r", "wrist_link", "gripper_finger_r", kinematics::JointType::Prismatic, Vec3{0.15f, 0.3f, 0.0f}, Vec3{1.0f, 0.0f, 0.0f}, 0.0f, 0.1f)
+                    .addCube("inspection_platform", Vec3{3.5f, 0.5f, -1.5f}, Vec3{2.0f, 1.0f, 1.5f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Metallic({0.5f, 0.52f, 0.55f, 1.0f}, 0.40f), true)
+                    .addCube("target_workpiece", Vec3{3.5f, 1.25f, -1.5f}, Vec3{0.6f, 0.5f, 0.6f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Metallic({0.95f, 0.10f, 0.15f, 1.0f}, 0.10f))
+                    .addCube("safety_barrier", Vec3{-2.5f, 0.6f, 2.5f}, Vec3{3.5f, 1.2f, 0.2f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Matte({0.95f, 0.80f, 0.05f, 1.0f}), true)
+                    .build()
+            );
+        }, "Set up the 3D industrial robotic manipulator workstation scene.")
+        .def("load_scene_mesh", &SimLabApp::loadSceneMesh, py::arg("obj_file_path"), "Load an OBJ 3D mesh model into the scene.")
         .def("set_joint_position", [](SimLabApp& self, const std::string& name, float pos) {
             if (auto* j = self.scene().findJoint(name)) {
                 j->position = pos;
@@ -135,6 +180,9 @@ PYBIND11_MODULE(corium_sim_py, m) {
         }, py::arg("dt") = 0.016667f,
         "Advance physics and kinematics simulation by one timestep.")
         .def("get_sensor_frame", [](SimLabApp& self) {
+            if (!self.renderer().isInitialized()) {
+                self.renderer().initialize(nullptr, 1280, 720);
+            }
             auto pixels = self.renderer().readOffscreenPixels(self.renderer().createOffscreenTarget(128, 128));
             uint32_t w = self.sensorCamera().width();
             uint32_t h = self.sensorCamera().height();
@@ -145,12 +193,32 @@ PYBIND11_MODULE(corium_sim_py, m) {
 
             return py::bytes(reinterpret_cast<const char*>(pixels.data()), pixels.size());
         })
+        .def("save_sensor_frame_ppm", [](SimLabApp& self, const std::string& filename) -> bool {
+            if (!self.renderer().isInitialized()) {
+                self.renderer().initialize(nullptr, 1280, 720);
+            }
+            auto pixels = self.renderer().readOffscreenPixels(self.renderer().createOffscreenTarget(128, 128));
+            uint32_t w = self.sensorCamera().width();
+            uint32_t h = self.sensorCamera().height();
+
+            std::ofstream out(filename, std::ios::binary);
+            if (!out.is_open()) return false;
+
+            out << "P6\n" << w << " " << h << "\n255\n";
+            for (size_t i = 0; i + 3 < pixels.size(); i += 4) {
+                out.put(static_cast<char>(pixels[i]));     // R
+                out.put(static_cast<char>(pixels[i + 1])); // G
+                out.put(static_cast<char>(pixels[i + 2])); // B
+            }
+            return true;
+        }, py::arg("filename"), "Save current onboard camera view directly as a PPM image file.")
         .def("get_observation", [](SimLabApp& self) {
             scene::SimEntity* agent = self.scene().findEntity("agent_robot");
             if (!agent) agent = self.scene().findEntity("robot_agent");
 
             scene::SimEntity* target = self.scene().findEntity("target_goal");
             if (!target) target = self.scene().findEntity("target_box");
+            if (!target) target = self.scene().findEntity("target_workpiece");
 
             py::dict obs;
             if (agent && target) {

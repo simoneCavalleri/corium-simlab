@@ -31,6 +31,7 @@ class CoriumEnv:
     def __init__(self, render_mode: str = "human", max_steps: int = 500, sim_dt: float = 0.016667):
         self.render_mode = render_mode
         self._app = corium_sim_py.SimLabApp()
+        self._app.setup_default_scene()
         self._step_count = 0
         self._max_steps = max_steps
         self._sim_dt = sim_dt

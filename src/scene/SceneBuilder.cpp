@@ -12,13 +12,13 @@ SceneBuilder::SceneBuilder(WGPUDevice device, WGPUQueue queue)
 
 SceneBuilder& SceneBuilder::addGroundGrid(float width, float depth, uint32_t subdivisions)
 {
-    if (!_device || !_queue) return *this;
-
     SimEntity entity{};
     entity.id = _nextEntityId++;
     entity.name = "ground_grid";
-    entity.mesh = renderer::Mesh::createPlane(_device, _queue, width, depth, subdivisions);
-    entity.texture = renderer::Texture::createGridPattern(_device, _queue, 512, 512);
+    if (_device && _queue) {
+        entity.mesh = renderer::Mesh::createPlane(_device, _queue, width, depth, subdivisions);
+        entity.texture = renderer::Texture::createGridPattern(_device, _queue, 512, 512);
+    }
     entity.material = renderer::Material::Matte({0.3f, 0.35f, 0.40f, 1.0f});
     entity.position = Vec3{0.0f, 0.0f, 0.0f};
     entity.isStatic = true;
@@ -41,13 +41,13 @@ SceneBuilder& SceneBuilder::addCube(
     bool hasPhysics
 )
 {
-    if (!_device || !_queue) return *this;
-
     SimEntity entity{};
     entity.id = _nextEntityId++;
     entity.name = std::move(name);
-    entity.mesh = renderer::Mesh::createCube(_device, _queue, 1.0f);
-    entity.texture = renderer::Texture::createCheckerboard(_device, _queue, 256, 256, 32);
+    if (_device && _queue) {
+        entity.mesh = renderer::Mesh::createCube(_device, _queue, 1.0f);
+        entity.texture = renderer::Texture::createCheckerboard(_device, _queue, 256, 256, 32);
+    }
     entity.material = material;
     entity.position = position;
     entity.scale = scale;
@@ -70,13 +70,13 @@ SceneBuilder& SceneBuilder::addSphere(
     bool hasPhysics
 )
 {
-    if (!_device || !_queue) return *this;
-
     SimEntity entity{};
     entity.id = _nextEntityId++;
     entity.name = std::move(name);
-    entity.mesh = renderer::Mesh::createSphere(_device, _queue, radius, 32, 32);
-    entity.texture = renderer::Texture::createCheckerboard(_device, _queue, 256, 256, 32);
+    if (_device && _queue) {
+        entity.mesh = renderer::Mesh::createSphere(_device, _queue, radius, 32, 32);
+        entity.texture = renderer::Texture::createCheckerboard(_device, _queue, 256, 256, 32);
+    }
     entity.material = material;
     entity.position = position;
     entity.scale = scale;
@@ -98,13 +98,13 @@ SceneBuilder& SceneBuilder::addPyramid(
     bool hasPhysics
 )
 {
-    if (!_device || !_queue) return *this;
-
     SimEntity entity{};
     entity.id = _nextEntityId++;
     entity.name = std::move(name);
-    entity.mesh = renderer::Mesh::createPyramid(_device, _queue, baseWidth, height);
-    entity.texture = renderer::Texture::createGridPattern(_device, _queue, 256, 256);
+    if (_device && _queue) {
+        entity.mesh = renderer::Mesh::createPyramid(_device, _queue, baseWidth, height);
+        entity.texture = renderer::Texture::createGridPattern(_device, _queue, 256, 256);
+    }
     entity.material = material;
     entity.position = position;
     entity.isStatic = isStatic;
@@ -127,19 +127,15 @@ SceneBuilder& SceneBuilder::addModel(
     bool hasPhysics
 )
 {
-    if (!_device || !_queue) return *this;
-
     renderer::MeshData data = renderer::MeshLoader::parseOBJFile(objFilePath);
-    if (!data.success) {
-        CORIUM_LOG_WARN("SceneBuilder", "Failed to load OBJ model from path: ", objFilePath);
-        return *this;
-    }
 
     SimEntity entity{};
     entity.id = _nextEntityId++;
     entity.name = std::move(name);
-    entity.mesh.upload(_device, _queue, data.vertices, data.indices);
-    entity.texture = renderer::Texture::createCheckerboard(_device, _queue, 256, 256, 32);
+    if (data.success && _device && _queue) {
+        entity.mesh.upload(_device, _queue, data.vertices, data.indices);
+        entity.texture = renderer::Texture::createCheckerboard(_device, _queue, 256, 256, 32);
+    }
     entity.material = material;
     entity.position = position;
     entity.scale = scale;
@@ -164,13 +160,13 @@ SceneBuilder& SceneBuilder::addCylinder(
     bool hasPhysics
 )
 {
-    if (!_device || !_queue) return *this;
-
     SimEntity entity{};
     entity.id = _nextEntityId++;
     entity.name = std::move(name);
-    entity.mesh = renderer::Mesh::createCylinder(_device, _queue, radius, height, segments);
-    entity.texture = renderer::Texture::createCheckerboard(_device, _queue, 256, 256, 32);
+    if (_device && _queue) {
+        entity.mesh = renderer::Mesh::createCylinder(_device, _queue, radius, height, segments);
+        entity.texture = renderer::Texture::createCheckerboard(_device, _queue, 256, 256, 32);
+    }
     entity.material = material;
     entity.position = position;
     entity.scale = scale;
