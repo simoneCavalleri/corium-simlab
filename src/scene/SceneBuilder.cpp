@@ -36,7 +36,9 @@ SceneBuilder& SceneBuilder::addCube(
     const Vec3& position,
     const Vec3& scale,
     const Vec3& rotation,
-    const renderer::Material& material
+    const renderer::Material& material,
+    bool isStatic,
+    bool hasPhysics
 )
 {
     if (!_device || !_queue) return *this;
@@ -50,6 +52,8 @@ SceneBuilder& SceneBuilder::addCube(
     entity.position = position;
     entity.scale = scale;
     entity.rotation = rotation;
+    entity.isStatic = isStatic;
+    entity.hasPhysics = hasPhysics;
     entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
 
     _scene.addEntity(std::move(entity));
@@ -61,7 +65,9 @@ SceneBuilder& SceneBuilder::addSphere(
     const Vec3& position,
     float radius,
     const Vec3& scale,
-    const renderer::Material& material
+    const renderer::Material& material,
+    bool isStatic,
+    bool hasPhysics
 )
 {
     if (!_device || !_queue) return *this;
@@ -74,6 +80,8 @@ SceneBuilder& SceneBuilder::addSphere(
     entity.material = material;
     entity.position = position;
     entity.scale = scale;
+    entity.isStatic = isStatic;
+    entity.hasPhysics = hasPhysics;
     entity.localBounds = renderer::BoundingBox{{-radius, -radius, -radius}, {radius, radius, radius}};
 
     _scene.addEntity(std::move(entity));
@@ -85,7 +93,9 @@ SceneBuilder& SceneBuilder::addPyramid(
     const Vec3& position,
     float baseWidth,
     float height,
-    const renderer::Material& material
+    const renderer::Material& material,
+    bool isStatic,
+    bool hasPhysics
 )
 {
     if (!_device || !_queue) return *this;
@@ -97,6 +107,8 @@ SceneBuilder& SceneBuilder::addPyramid(
     entity.texture = renderer::Texture::createGridPattern(_device, _queue, 256, 256);
     entity.material = material;
     entity.position = position;
+    entity.isStatic = isStatic;
+    entity.hasPhysics = hasPhysics;
     float w = baseWidth * 0.5f;
     entity.localBounds = renderer::BoundingBox{{-w, 0.0f, -w}, {w, height, w}};
 
@@ -110,7 +122,9 @@ SceneBuilder& SceneBuilder::addModel(
     const Vec3& position,
     const Vec3& scale,
     const Vec3& rotation,
-    const renderer::Material& material
+    const renderer::Material& material,
+    bool isStatic,
+    bool hasPhysics
 )
 {
     if (!_device || !_queue) return *this;
@@ -130,6 +144,8 @@ SceneBuilder& SceneBuilder::addModel(
     entity.position = position;
     entity.scale = scale;
     entity.rotation = rotation;
+    entity.isStatic = isStatic;
+    entity.hasPhysics = hasPhysics;
     entity.localBounds = data.bounds;
 
     _scene.addEntity(std::move(entity));
@@ -143,7 +159,9 @@ SceneBuilder& SceneBuilder::addCylinder(
     float height,
     uint32_t segments,
     const Vec3& scale,
-    const renderer::Material& material
+    const renderer::Material& material,
+    bool isStatic,
+    bool hasPhysics
 )
 {
     if (!_device || !_queue) return *this;
@@ -156,6 +174,8 @@ SceneBuilder& SceneBuilder::addCylinder(
     entity.material = material;
     entity.position = position;
     entity.scale = scale;
+    entity.isStatic = isStatic;
+    entity.hasPhysics = hasPhysics;
     float halfH = height * 0.5f;
     entity.localBounds = renderer::BoundingBox{{-radius, -halfH, -radius}, {radius, halfH, radius}};
 
@@ -185,14 +205,18 @@ SceneBuilder& SceneBuilder::addJoint(
 {
     kinematics::SimJoint joint{};
     joint.id = _nextEntityId++;
-    joint.name = std::move(name);
-    joint.parentName = std::move(parentName);
-    joint.childName = std::move(childName);
+    joint.name = name;
+    joint.parentName = parentName;
+    joint.childName = childName;
     joint.type = type;
     joint.anchor = anchor;
     joint.axis = axis;
     joint.minLimit = minLimit;
     joint.maxLimit = maxLimit;
+
+    if (SimEntity* child = _scene.findEntity(childName)) {
+        child->hasPhysics = false;
+    }
 
     _scene.addJoint(std::move(joint));
     return *this;

@@ -98,14 +98,23 @@ public:
     [[nodiscard]] const Texture& defaultGridTexture() const noexcept { return _defaultGridTex; }
 
 private:
+    struct BindGroupCacheEntry {
+        WGPUBindGroup bindGroup = nullptr;
+        WGPUTextureView textureView = nullptr;
+        WGPUSampler sampler = nullptr;
+        WGPUBuffer uboBuffer = nullptr;
+    };
+
     void createSurface();
     void configureSurface();
     void createDepthBuffer();
     void createPipelineLayout();
     void createRenderPipeline();
+    void clearRenderPools() noexcept;
     void moveFrom(WebGpuBackend&& rhs) noexcept;
 
-    WGPUBindGroup createBindGroup(const Texture& texture) noexcept;
+    WGPUBindGroup getOrCreateBindGroup(size_t index, const Texture& texture, WGPUBuffer uboBuffer) noexcept;
+    WGPUBuffer getOrCreateUboBuffer(size_t index) noexcept;
 
     WGPUInstance _instance = nullptr;
     WGPUAdapter _adapter = nullptr;
@@ -120,12 +129,14 @@ private:
     WGPUPipelineLayout _pipelineLayout = nullptr;
     WGPURenderPipeline _pipeline = nullptr;
     WGPUBuffer _uniformBuffer = nullptr;
+    std::vector<WGPUBuffer> _uboPool{};
+    std::vector<BindGroupCacheEntry> _bindGroupPool{};
+    size_t _currentUboIndex = 0;
 
     WGPURenderPassEncoder _currentPass = nullptr;
     WGPUCommandEncoder _currentEncoder = nullptr;
     WGPUTexture _currentSurfaceTexture = nullptr;
     WGPUTextureView _currentColorView = nullptr;
-    std::vector<WGPUBindGroup> _activeBindGroups{};
 
     Texture _defaultCheckerTex{};
     Texture _defaultGridTex{};

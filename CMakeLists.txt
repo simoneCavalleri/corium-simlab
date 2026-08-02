@@ -55,6 +55,7 @@ add_library(corium_sim_core STATIC
     src/renderer/SensorCamera.cpp
     src/renderer/Texture.cpp
     src/renderer/WebGpuBackend.cpp
+    src/renderer/WebGpuSurface.cpp
     src/scene/SimScene.cpp
     src/scene/SceneBuilder.cpp
     src/physics/PhysicsEngine.cpp

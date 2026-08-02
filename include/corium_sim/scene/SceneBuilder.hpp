@@ -31,7 +31,9 @@ public:
         const math::Vec3& position = {0.0f, 0.0f, 0.0f},
         const math::Vec3& scale = {1.0f, 1.0f, 1.0f},
         const math::Vec3& rotation = {0.0f, 0.0f, 0.0f},
-        const renderer::Material& material = {}
+        const renderer::Material& material = {},
+        bool isStatic = false,
+        bool hasPhysics = true
     );
 
     /// @brief Add a 3D UV Sphere primitive entity to the scene with material properties.
@@ -40,7 +42,9 @@ public:
         const math::Vec3& position = {0.0f, 0.0f, 0.0f},
         float radius = 0.5f,
         const math::Vec3& scale = {1.0f, 1.0f, 1.0f},
-        const renderer::Material& material = {}
+        const renderer::Material& material = {},
+        bool isStatic = false,
+        bool hasPhysics = true
     );
 
     /// @brief Add a 3D Pyramid primitive entity to the scene with material properties.
@@ -49,7 +53,9 @@ public:
         const math::Vec3& position = {0.0f, 0.0f, 0.0f},
         float baseWidth = 1.0f,
         float height = 1.5f,
-        const renderer::Material& material = {}
+        const renderer::Material& material = {},
+        bool isStatic = false,
+        bool hasPhysics = true
     );
 
     /// @brief Load and add a 3D Wavefront OBJ mesh model entity to the scene with material properties.
@@ -59,7 +65,9 @@ public:
         const math::Vec3& position = {0.0f, 0.0f, 0.0f},
         const math::Vec3& scale = {1.0f, 1.0f, 1.0f},
         const math::Vec3& rotation = {0.0f, 0.0f, 0.0f},
-        const renderer::Material& material = {}
+        const renderer::Material& material = {},
+        bool isStatic = false,
+        bool hasPhysics = true
     );
 
     /// @brief Add a 3D Cylinder primitive entity to the scene with material properties.
@@ -70,7 +78,9 @@ public:
         float height = 1.0f,
         uint32_t segments = 24,
         const math::Vec3& scale = {1.0f, 1.0f, 1.0f},
-        const renderer::Material& material = {}
+        const renderer::Material& material = {},
+        bool isStatic = false,
+        bool hasPhysics = true
     );
 
     /// @brief Add a custom pre-constructed entity to the scene.

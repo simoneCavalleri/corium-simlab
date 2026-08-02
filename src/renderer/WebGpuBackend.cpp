@@ -1,4 +1,6 @@
 #include "corium_sim/renderer/WebGpuBackend.hpp"
+#include "corium_sim/renderer/WgslShaders.hpp"
+#include "corium_sim/Log.hpp"
 
 #include <iostream>
 #include <utility>
@@ -20,128 +22,22 @@
 
 namespace corium_sim::renderer {
 
-static const char* WGSL_SHADER_SOURCE = R"(
-struct Uniforms {
-    model: mat4x4<f32>,
-    viewProj: mat4x4<f32>,
-    lightDir: vec4<f32>,
-    lightColor: vec4<f32>,
-    cameraPos: vec4<f32>,
-    ambientColor: vec4<f32>,
-    albedoColor: vec4<f32>,
-    materialParams: vec4<f32>, // x=metallic, y=roughness, z=emissive
-    time: f32,
-};
-
-@group(0) @binding(0) var<uniform> ubo: Uniforms;
-@group(0) @binding(1) var textureSampler: sampler;
-@group(0) @binding(2) var textureData: texture_2d<f32>;
-
-struct VertexInput {
-    @location(0) position: vec3<f32>,
-    @location(1) normal: vec3<f32>,
-    @location(2) uv: vec2<f32>,
-    @location(3) color: vec4<f32>,
-};
-
-struct VertexOutput {
-    @builtin(position) clipPosition: vec4<f32>,
-    @location(0) worldPos: vec3<f32>,
-    @location(1) normal: vec3<f32>,
-    @location(2) uv: vec2<f32>,
-    @location(3) color: vec4<f32>,
-};
-
-const PI: f32 = 3.14159265359;
-
-fn distributionGGX(N: vec3<f32>, H: vec3<f32>, roughness: f32) -> f32 {
-    let a = roughness * roughness;
-    let a2 = a * a;
-    let NdotH = max(dot(N, H), 0.0);
-    let NdotH2 = NdotH * NdotH;
-    let num = a2;
-    let denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    return num / (PI * denom * denom);
+template <typename T, void (*ReleaseFunc)(T)>
+inline void safeRelease(T& handle) noexcept {
+    if (handle) {
+        ReleaseFunc(handle);
+        handle = nullptr;
+    }
 }
 
-fn geometrySchlickGGX(NdotV: f32, roughness: f32) -> f32 {
-    let r = (roughness + 1.0);
-    let k = (r * r) / 8.0;
-    return NdotV / (NdotV * (1.0 - k) + k);
+template <typename T, void (*DestroyFunc)(T), void (*ReleaseFunc)(T)>
+inline void safeDestroyAndRelease(T& handle) noexcept {
+    if (handle) {
+        DestroyFunc(handle);
+        ReleaseFunc(handle);
+        handle = nullptr;
+    }
 }
-
-fn geometrySmith(N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, roughness: f32) -> f32 {
-    let NdotV = max(dot(N, V), 0.0);
-    let NdotL = max(dot(N, L), 0.0);
-    let ggx2 = geometrySchlickGGX(NdotV, roughness);
-    let ggx1 = geometrySchlickGGX(NdotL, roughness);
-    return ggx1 * ggx2;
-}
-
-fn fresnelSchlick(cosTheta: f32, F0: vec3<f32>) -> vec3<f32> {
-    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}
-
-@vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
-    var out: VertexOutput;
-    let worldPos4 = ubo.model * vec4<f32>(in.position, 1.0);
-    out.worldPos = worldPos4.xyz;
-    out.clipPosition = ubo.viewProj * worldPos4;
-    
-    let normalMatrix = mat3x3<f32>(ubo.model[0].xyz, ubo.model[1].xyz, ubo.model[2].xyz);
-    out.normal = normalize(normalMatrix * in.normal);
-    
-    out.uv = in.uv;
-    out.color = in.color;
-    return out;
-}
-
-@fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let N = normalize(in.normal);
-    let V = normalize(ubo.cameraPos.xyz - in.worldPos);
-    let L = normalize(ubo.lightDir.xyz);
-    let H = normalize(V + L);
-
-    let texColor = textureSample(textureData, textureSampler, in.uv);
-    let albedo = in.color.rgb * ubo.albedoColor.rgb * texColor.rgb;
-    let metallic = clamp(ubo.materialParams.x, 0.0, 1.0);
-    let roughness = clamp(ubo.materialParams.y, 0.05, 1.0);
-    let emissive = ubo.materialParams.z;
-
-    var F0 = vec3<f32>(0.04);
-    F0 = mix(F0, albedo, metallic);
-
-    // Cook-Torrance BRDF
-    let NDF = distributionGGX(N, H, roughness);
-    let G = geometrySmith(N, V, L, roughness);
-    let F = fresnelSchlick(max(dot(H, V), 0.0), F0);
-
-    let numerator = NDF * G * F;
-    let denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
-    let specular = numerator / denominator;
-
-    let kS = F;
-    var kD = vec3<f32>(1.0) - kS;
-    kD *= 1.0 - metallic;
-
-    let NdotL = max(dot(N, L), 0.0);
-    let radiance = ubo.lightColor.rgb;
-
-    let Lo = (kD * albedo / PI + specular) * radiance * NdotL;
-    let ambient = ubo.ambientColor.rgb * albedo;
-    let emissiveCol = albedo * emissive;
-
-    let color = ambient + Lo + emissiveCol;
-
-    // Tone mapping and gamma correction
-    let mapped = color / (color + vec3<f32>(1.0));
-    let finalColor = pow(mapped, vec3<f32>(1.0 / 2.2));
-
-    return vec4<f32>(finalColor, in.color.a * texColor.a * ubo.albedoColor.a);
-}
-)";
 
 WebGpuBackend::WebGpuBackend() = default;
 
@@ -170,7 +66,7 @@ bool WebGpuBackend::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
     _height = height;
     _window = windowHandle;
 
-    std::cout << "[WebGpuBackend] Initializing 3D WebGPU Engine (" << width << "x" << height << ")..." << std::endl;
+    CORIUM_LOG_INFO("WebGpuBackend", "Initializing 3D WebGPU Engine (", width, "x", height, ")...");
 
     // 1. Create WebGPU Instance
     WGPUInstanceDescriptor instanceDesc{};
@@ -193,7 +89,7 @@ bool WebGpuBackend::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
                 if (status == WGPURequestAdapterStatus_Success && adapter) {
                     *static_cast<WGPUAdapter*>(userdata) = adapter;
                 } else if (message) {
-                    std::cout << "[WebGpuBackend] Adapter message: " << message << "\n";
+                    CORIUM_LOG_WARN("WebGpuBackend", "Adapter message: ", message);
                 }
             },
             &_adapter
@@ -210,7 +106,7 @@ bool WebGpuBackend::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
                 if (status == WGPURequestDeviceStatus_Success && device) {
                     *static_cast<WGPUDevice*>(userdata) = device;
                 } else if (message) {
-                    std::cout << "[WebGpuBackend] Device message: " << message << "\n";
+                    CORIUM_LOG_WARN("WebGpuBackend", "Device message: ", message);
                 }
             },
             &_device
@@ -218,7 +114,7 @@ bool WebGpuBackend::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
     }
 
     if (!_device) {
-        std::cerr << "[WebGpuBackend] Error: Failed to obtain WGPUDevice!\n";
+        CORIUM_LOG_ERROR("WebGpuBackend", "Failed to obtain WGPUDevice!");
         return false;
     }
 
@@ -247,7 +143,7 @@ bool WebGpuBackend::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
     _clearColor = WGPUColor{ 0.08, 0.09, 0.12, 1.0 };
     _initialized = true;
 
-    std::cout << "[WebGpuBackend] 3D WebGPU Renderer Initialized successfully!\n";
+    CORIUM_LOG_INFO("WebGpuBackend", "3D WebGPU Renderer Initialized successfully!");
     return true;
 }
 
@@ -451,6 +347,7 @@ bool WebGpuBackend::beginFrame(const Camera& camera, float time) noexcept
 
     _frameCount++;
     _inFrame = true;
+    _currentUboIndex = 0;
 
     // Update Uniform Buffer Object
     _currentUbo.viewProj = camera.getViewProjectionMatrix();
@@ -511,32 +408,82 @@ bool WebGpuBackend::beginFrame(const Camera& camera, float time) noexcept
     return true;
 }
 
-WGPUBindGroup WebGpuBackend::createBindGroup(const Texture& texture) noexcept
+void WebGpuBackend::clearRenderPools() noexcept
+{
+    for (auto& entry : _bindGroupPool) {
+        if (entry.bindGroup) {
+            safeRelease<WGPUBindGroup, wgpuBindGroupRelease>(entry.bindGroup);
+        }
+    }
+    _bindGroupPool.clear();
+
+    for (WGPUBuffer buf : _uboPool) {
+        if (buf) {
+            safeDestroyAndRelease<WGPUBuffer, wgpuBufferDestroy, wgpuBufferRelease>(buf);
+        }
+    }
+    _uboPool.clear();
+    _currentUboIndex = 0;
+}
+
+WGPUBuffer WebGpuBackend::getOrCreateUboBuffer(size_t index) noexcept
+{
+    if (index < _uboPool.size()) {
+        return _uboPool[index];
+    }
+    WGPUBufferDescriptor uboDesc{};
+    uboDesc.size = sizeof(UniformBufferObject);
+    uboDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+    uboDesc.mappedAtCreation = false;
+    WGPUBuffer buf = wgpuDeviceCreateBuffer(_device, &uboDesc);
+    _uboPool.push_back(buf);
+    return buf;
+}
+
+WGPUBindGroup WebGpuBackend::getOrCreateBindGroup(size_t index, const Texture& texture, WGPUBuffer uboBuffer) noexcept
 {
     const Texture& texToUse = texture.isValid() ? texture : _defaultCheckerTex;
+    WGPUTextureView texView = texToUse.view();
+    WGPUSampler texSampler = texToUse.sampler();
+
+    if (index < _bindGroupPool.size()) {
+        auto& entry = _bindGroupPool[index];
+        if (entry.bindGroup && entry.textureView == texView && entry.sampler == texSampler && entry.uboBuffer == uboBuffer) {
+            return entry.bindGroup; // Cache Hit! Zero WebGPU API allocations!
+        }
+        if (entry.bindGroup) {
+            safeRelease<WGPUBindGroup, wgpuBindGroupRelease>(entry.bindGroup);
+        }
+    } else {
+        _bindGroupPool.resize(index + 1);
+    }
 
     WGPUBindGroupEntry entries[3]{};
-
-    // Binding 0: Uniform Buffer
     entries[0].binding = 0;
-    entries[0].buffer = _uniformBuffer;
+    entries[0].buffer = uboBuffer ? uboBuffer : _uniformBuffer;
     entries[0].offset = 0;
     entries[0].size = sizeof(UniformBufferObject);
 
-    // Binding 1: Sampler
     entries[1].binding = 1;
-    entries[1].sampler = texToUse.sampler();
+    entries[1].sampler = texSampler;
 
-    // Binding 2: Texture View
     entries[2].binding = 2;
-    entries[2].textureView = texToUse.view();
+    entries[2].textureView = texView;
 
     WGPUBindGroupDescriptor bgDesc{};
     bgDesc.layout = _bindGroupLayout;
     bgDesc.entryCount = 3;
     bgDesc.entries = entries;
 
-    return wgpuDeviceCreateBindGroup(_device, &bgDesc);
+    WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(_device, &bgDesc);
+    _bindGroupPool[index] = BindGroupCacheEntry{
+        .bindGroup = bindGroup,
+        .textureView = texView,
+        .sampler = texSampler,
+        .uboBuffer = uboBuffer
+    };
+
+    return bindGroup;
 }
 
 void WebGpuBackend::drawMesh(
@@ -552,14 +499,14 @@ void WebGpuBackend::drawMesh(
     _currentUbo.albedoColor = material.albedo;
     _currentUbo.materialParams = math::Vec4{material.metallic, material.roughness, material.emissive, 0.0f};
 
-    wgpuQueueWriteBuffer(_queue, _uniformBuffer, 0, &_currentUbo, sizeof(UniformBufferObject));
+    WGPUBuffer ubo = getOrCreateUboBuffer(_currentUboIndex);
+    wgpuQueueWriteBuffer(_queue, ubo, 0, &_currentUbo, sizeof(UniformBufferObject));
 
-    WGPUBindGroup bindGroup = createBindGroup(texture);
+    WGPUBindGroup bindGroup = getOrCreateBindGroup(_currentUboIndex, texture, ubo);
+    _currentUboIndex++;
+
     wgpuRenderPassEncoderSetBindGroup(_currentPass, 0, bindGroup, 0, nullptr);
-
     mesh.render(_currentPass);
-
-    _activeBindGroups.push_back(bindGroup);
 }
 
 void WebGpuBackend::endFrame() noexcept
@@ -567,32 +514,20 @@ void WebGpuBackend::endFrame() noexcept
     if (!_inFrame || !_currentPass || !_currentEncoder) return;
 
     wgpuRenderPassEncoderEnd(_currentPass);
-    wgpuRenderPassEncoderRelease(_currentPass);
-    _currentPass = nullptr;
+    safeRelease<WGPURenderPassEncoder, wgpuRenderPassEncoderRelease>(_currentPass);
 
     WGPUCommandBufferDescriptor cmdBufferDesc{};
     WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(_currentEncoder, &cmdBufferDesc);
 
     wgpuQueueSubmit(_queue, 1, &cmdBuffer);
 
-    // Release bind groups before present
-    for (WGPUBindGroup bg : _activeBindGroups) {
-        if (bg) wgpuBindGroupRelease(bg);
-    }
-    _activeBindGroups.clear();
-
-    // Release ColorView before present — surface texture is owned by the swapchain, do NOT release it
-    if (_currentColorView) {
-        wgpuTextureViewRelease(_currentColorView);
-        _currentColorView = nullptr;
-    }
-    _currentSurfaceTexture = nullptr; // not owned, just clear the pointer
+    safeRelease<WGPUTextureView, wgpuTextureViewRelease>(_currentColorView);
+    _currentSurfaceTexture = nullptr;
 
     wgpuSurfacePresent(_surface);
 
-    wgpuCommandBufferRelease(cmdBuffer);
-    wgpuCommandEncoderRelease(_currentEncoder);
-    _currentEncoder = nullptr;
+    safeRelease<WGPUCommandBuffer, wgpuCommandBufferRelease>(cmdBuffer);
+    safeRelease<WGPUCommandEncoder, wgpuCommandEncoderRelease>(_currentEncoder);
 
     _inFrame = false;
 }
@@ -604,36 +539,15 @@ void WebGpuBackend::shutdown() noexcept
     _defaultCheckerTex.destroy();
     _defaultGridTex.destroy();
 
-    if (_uniformBuffer) {
-        wgpuBufferDestroy(_uniformBuffer);
-        wgpuBufferRelease(_uniformBuffer);
-        _uniformBuffer = nullptr;
-    }
-    if (_pipeline) {
-        wgpuRenderPipelineRelease(_pipeline);
-        _pipeline = nullptr;
-    }
-    if (_pipelineLayout) {
-        wgpuPipelineLayoutRelease(_pipelineLayout);
-        _pipelineLayout = nullptr;
-    }
-    if (_bindGroupLayout) {
-        wgpuBindGroupLayoutRelease(_bindGroupLayout);
-        _bindGroupLayout = nullptr;
-    }
-    if (_depthTextureView) {
-        wgpuTextureViewRelease(_depthTextureView);
-        _depthTextureView = nullptr;
-    }
-    if (_depthTexture) {
-        wgpuTextureDestroy(_depthTexture);
-        wgpuTextureRelease(_depthTexture);
-        _depthTexture = nullptr;
-    }
-    if (_queue) {
-        wgpuQueueRelease(_queue);
-        _queue = nullptr;
-    }
+    clearRenderPools();
+
+    safeDestroyAndRelease<WGPUBuffer, wgpuBufferDestroy, wgpuBufferRelease>(_uniformBuffer);
+    safeRelease<WGPURenderPipeline, wgpuRenderPipelineRelease>(_pipeline);
+    safeRelease<WGPUPipelineLayout, wgpuPipelineLayoutRelease>(_pipelineLayout);
+    safeRelease<WGPUBindGroupLayout, wgpuBindGroupLayoutRelease>(_bindGroupLayout);
+    safeRelease<WGPUTextureView, wgpuTextureViewRelease>(_depthTextureView);
+    safeDestroyAndRelease<WGPUTexture, wgpuTextureDestroy, wgpuTextureRelease>(_depthTexture);
+    safeRelease<WGPUQueue, wgpuQueueRelease>(_queue);
     if (_device) {
         wgpuDeviceRelease(_device);
         _device = nullptr;
@@ -652,47 +566,7 @@ void WebGpuBackend::shutdown() noexcept
     }
 
     _initialized = false;
-    std::cout << "[WebGpuBackend] WebGPU context shutdown complete.\n";
-}
-
-void WebGpuBackend::createSurface()
-{
-#if defined(__linux__)
-    if (_window && _instance) {
-        int platform = glfwGetPlatform();
-        if (platform == GLFW_PLATFORM_WAYLAND) {
-#if defined(GLFW_EXPOSE_NATIVE_WAYLAND)
-            struct wl_display* display = glfwGetWaylandDisplay();
-            struct wl_surface* surface = glfwGetWaylandWindow(_window);
-            if (display && surface) {
-                WGPUSurfaceDescriptorFromWaylandSurface waylandDesc{};
-                waylandDesc.chain.sType = WGPUSType_SurfaceDescriptorFromWaylandSurface;
-                waylandDesc.display = display;
-                waylandDesc.surface = surface;
-
-                WGPUSurfaceDescriptor surfDesc{};
-                surfDesc.nextInChain = &waylandDesc.chain;
-                _surface = wgpuInstanceCreateSurface(_instance, &surfDesc);
-            }
-#endif
-        } else if (platform == GLFW_PLATFORM_X11) {
-#if defined(GLFW_EXPOSE_NATIVE_X11)
-            Display* display = glfwGetX11Display();
-            Window window = glfwGetX11Window(_window);
-            if (display && window) {
-                WGPUSurfaceDescriptorFromXlibWindow x11Desc{};
-                x11Desc.chain.sType = WGPUSType_SurfaceDescriptorFromXlibWindow;
-                x11Desc.display = display;
-                x11Desc.window = static_cast<uint64_t>(window);
-
-                WGPUSurfaceDescriptor surfDesc{};
-                surfDesc.nextInChain = &x11Desc.chain;
-                _surface = wgpuInstanceCreateSurface(_instance, &surfDesc);
-            }
-#endif
-        }
-    }
-#endif
+    CORIUM_LOG_INFO("WebGpuBackend", "WebGPU context shutdown complete.");
 }
 
 void WebGpuBackend::configureSurface()
@@ -786,7 +660,7 @@ void WebGpuBackend::createRenderPipeline()
     // WGSL Shader Module
     WGPUShaderModuleWGSLDescriptor wgslDesc{};
     wgslDesc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-    wgslDesc.code = WGSL_SHADER_SOURCE;
+    wgslDesc.code = WGSL_PBR_SHADER_SOURCE;
 
     WGPUShaderModuleDescriptor shaderDesc{};
     shaderDesc.nextInChain = &wgslDesc.chain;
@@ -883,6 +757,9 @@ void WebGpuBackend::moveFrom(WebGpuBackend&& rhs) noexcept
     _pipelineLayout = rhs._pipelineLayout;
     _pipeline = rhs._pipeline;
     _uniformBuffer = rhs._uniformBuffer;
+    _uboPool = std::move(rhs._uboPool);
+    _bindGroupPool = std::move(rhs._bindGroupPool);
+    _currentUboIndex = rhs._currentUboIndex;
 
     _defaultCheckerTex = std::move(rhs._defaultCheckerTex);
     _defaultGridTex = std::move(rhs._defaultGridTex);
@@ -905,6 +782,9 @@ void WebGpuBackend::moveFrom(WebGpuBackend&& rhs) noexcept
     rhs._pipelineLayout = nullptr;
     rhs._pipeline = nullptr;
     rhs._uniformBuffer = nullptr;
+    rhs._uboPool.clear();
+    rhs._bindGroupPool.clear();
+    rhs._currentUboIndex = 0;
     rhs._initialized = false;
 }
 

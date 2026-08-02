@@ -23,6 +23,7 @@ void JointKinematics::updateKinematics(scene::SimScene& scene, float deltaTime) 
         scene::SimEntity* child = scene.findEntity(joint.childName);
 
         if (!child) continue;
+        child->hasPhysics = false;
 
         if (!parent) {
             // Root joint relative to origin

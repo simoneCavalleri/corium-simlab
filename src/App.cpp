@@ -147,6 +147,7 @@ void SimLabApp::onInitialize()
 void SimLabApp::setScene(scene::SimScene scene) noexcept
 {
     _scene = std::move(scene);
+    _jointKinematics.updateKinematics(_scene, 0.0f);
     if (_gpuBackend.isInitialized() && _scene.entityCount() > 0) {
         renderer::BoundingBox bounds = _scene.sceneBounds();
         _camera.focusOnBounds(bounds.min, bounds.max);
@@ -199,19 +200,6 @@ void SimLabApp::onRender(double deltaTime)
     float dt = static_cast<float>(deltaTime);
     _renderFramesCount++;
 
-    WGPUDevice device = _gpuBackend.device();
-    WGPUQueue queue = _gpuBackend.queue();
-
-    if (_scene.entityCount() == 0 && device && queue) {
-        setScene(
-            scene::SimScene::builder(device, queue)
-                .addGroundGrid(50.0f, 50.0f, 50)
-                .addModel("agent_robot", "assets/models/sample_robot.obj", Vec3{0.0f, 0.0f, 0.0f})
-                .addCube("target_goal", Vec3{4.0f, 0.75f, -2.0f}, Vec3{1.2f, 1.2f, 1.2f})
-                .addSphere("obstacle_ball", Vec3{-3.0f, 1.0f, 2.0f}, 1.0f)
-                .build()
-        );
-    }
 
     // 1. Advance Physics Engine & Joint Kinematics Simulation Step
     _physicsEngine.step(_scene, dt);

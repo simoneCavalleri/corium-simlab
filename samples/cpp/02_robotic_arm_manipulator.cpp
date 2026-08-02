@@ -38,7 +38,8 @@ int main(int argc, char** argv)
                 Vec3{0.0f, 0.4f, 0.0f},
                 Vec3{3.0f, 0.8f, 2.0f},
                 Vec3{0.0f, 0.0f, 0.0f},
-                Material::Metallic({0.4f, 0.45f, 0.50f, 1.0f}, 0.35f) // Cast Iron Table Base
+                Material::Metallic({0.4f, 0.45f, 0.50f, 1.0f}, 0.35f), // Cast Iron Table Base
+                true // isStatic
             )
 
             // 3. Robotic Manipulator Pedestal Base
@@ -48,7 +49,8 @@ int main(int argc, char** argv)
                 Vec3{0.0f, 0.8f, 0.0f},
                 Vec3{0.8f, 0.8f, 0.8f},
                 Vec3{0.0f, 0.0f, 0.0f},
-                Material::Metallic({0.95f, 0.95f, 0.98f, 1.0f}, 0.15f) // Chrome Base Pedestal
+                Material::Metallic({0.95f, 0.95f, 0.98f, 1.0f}, 0.15f), // Chrome Base Pedestal
+                true // isStatic
             )
 
             // 4. Robotic Arm Links
@@ -143,7 +145,8 @@ int main(int argc, char** argv)
                 Vec3{3.5f, 0.5f, -1.5f},
                 Vec3{2.0f, 1.0f, 1.5f},
                 Vec3{0.0f, 0.0f, 0.0f},
-                Material::Metallic({0.5f, 0.52f, 0.55f, 1.0f}, 0.40f)
+                Material::Metallic({0.5f, 0.52f, 0.55f, 1.0f}, 0.40f),
+                true // isStatic
             )
             .addCube(
                 "target_workpiece",
@@ -159,7 +162,8 @@ int main(int argc, char** argv)
                 Vec3{-2.5f, 0.6f, 2.5f},
                 Vec3{3.5f, 1.2f, 0.2f},
                 Vec3{0.0f, 0.0f, 0.0f},
-                Material::Matte({0.95f, 0.80f, 0.05f, 1.0f}) // High-Contrast Safety Yellow
+                Material::Matte({0.95f, 0.80f, 0.05f, 1.0f}), // High-Contrast Safety Yellow
+                true // isStatic
             )
             .build();
 
