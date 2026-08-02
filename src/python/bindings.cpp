@@ -10,6 +10,7 @@
 #include "corium_sim/renderer/Material.hpp"
 #include "corium_sim/scene/SceneBuilder.hpp"
 #include "corium_sim/scene/SimScene.hpp"
+#include "corium_sim/scene/UrdfLoader.hpp"
 
 namespace py = pybind11;
 using namespace corium_sim;
@@ -154,7 +155,14 @@ PYBIND11_MODULE(corium_sim_py, m) {
                     .build()
             );
         }, "Set up the 3D industrial robotic manipulator workstation scene.")
+
         .def("load_scene_mesh", &SimLabApp::loadSceneMesh, py::arg("obj_file_path"), "Load an OBJ 3D mesh model into the scene.")
+        .def("load_urdf", [](SimLabApp& self, const std::string& urdfFilePath) {
+            if (!self.renderer().isInitialized()) {
+                self.renderer().initialize(nullptr, 1280, 720);
+            }
+            return scene::UrdfLoader::loadURDF(urdfFilePath, self.scene(), self.renderer().device(), self.renderer().queue());
+        }, py::arg("urdf_file_path"), "Parse and import a URDF XML robot specification model file.")
         .def("set_joint_position", [](SimLabApp& self, const std::string& name, float pos) {
             if (auto* j = self.scene().findJoint(name)) {
                 j->position = pos;

@@ -98,6 +98,13 @@ public:
         float maxLimit =  3.14159f
     );
 
+    /// @brief Parse and import a URDF (Unified Robot Description Format) XML robot specification file.
+    SceneBuilder& addURDF(
+        const std::string& urdfFilePath,
+        const math::Vec3& basePosition = {0.0f, 0.0f, 0.0f},
+        const math::Vec3& baseScale = {1.0f, 1.0f, 1.0f}
+    );
+
     /// @brief Finalize and build the completed SimScene environment.
     [[nodiscard]] SimScene build();
 

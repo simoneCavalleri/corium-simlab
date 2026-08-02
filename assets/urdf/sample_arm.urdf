@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<robot name="sample_industrial_arm">
+  <!-- Link 0: Robot Base -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0.4 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.8 0.8 0.8"/>
+      </geometry>
+      <material name="metallic_gray">
+        <color rgba="0.8 0.8 0.85 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- Link 1: Shoulder Link -->
+  <link name="shoulder_link">
+    <visual>
+      <origin xyz="0 1.2 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.4 1.0 0.4"/>
+      </geometry>
+      <material name="blue">
+        <color rgba="0.15 0.55 0.95 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- Link 2: Elbow Link -->
+  <link name="elbow_link">
+    <visual>
+      <origin xyz="0 2.1 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.3 0.8 0.3"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="0.95 0.85 0.1 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- Joint 1: Base to Shoulder Revolute Yaw -->
+  <joint name="joint_shoulder_yaw" type="revolute">
+    <parent link="base_link"/>
+    <child link="shoulder_link"/>
+    <origin xyz="0 0.6 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14" upper="3.14"/>
+  </joint>
+
+  <!-- Joint 2: Shoulder to Elbow Revolute Pitch -->
+  <joint name="joint_elbow_pitch" type="revolute">
+    <parent link="shoulder_link"/>
+    <child link="elbow_link"/>
+    <origin xyz="0 0.9 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-2.09" upper="2.09"/>
+  </joint>
+</robot>

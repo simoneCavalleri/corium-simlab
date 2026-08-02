@@ -1,4 +1,5 @@
 #include "corium_sim/scene/SceneBuilder.hpp"
+#include "corium_sim/scene/UrdfLoader.hpp"
 #include "corium_sim/renderer/MeshLoader.hpp"
 #include "corium_sim/Log.hpp"
 
@@ -215,6 +216,16 @@ SceneBuilder& SceneBuilder::addJoint(
     }
 
     _scene.addJoint(std::move(joint));
+    return *this;
+}
+
+SceneBuilder& SceneBuilder::addURDF(
+    const std::string& urdfFilePath,
+    const Vec3& basePosition,
+    const Vec3& baseScale
+)
+{
+    UrdfLoader::loadURDF(urdfFilePath, _scene, _device, _queue, basePosition, baseScale);
     return *this;
 }
 
