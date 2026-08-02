@@ -79,6 +79,22 @@ cmake --build build
 ./build/samples/cpp/sample_02_robotic_arm_manipulator
 ```
 
+### Python Package Installation & CLI Tool
+
+```bash
+# Install corium-sim in editable mode
+pip install -e . --break-system-packages
+
+# Display system info and WebGPU capabilities
+corium-sim info
+
+# Preview any URDF or OBJ 3D model
+corium-sim view assets/urdf/sample_arm.urdf
+
+# Run any sample script directly (1 to 6)
+corium-sim run 5
+```
+
 ### Python Gymnasium & Feature Samples
 
 ```bash

@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "Simone Cavalleri", email = "simone@dev.local"}
+    {name = "Simone Cavalleri", email = "simone.cavalleri.94@gmail.com"}
 ]
 keywords = ["reinforcement-learning", "robotics", "simulation", "webgpu", "gymnasium", "3d"]
 classifiers = [

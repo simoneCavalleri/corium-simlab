@@ -8,6 +8,7 @@ setup(
     long_description=open("README.md").read() if os.path.exists("README.md") else "",
     long_description_content_type="text/markdown",
     author="Simone Cavalleri",
+    author_email="simone.cavalleri.94@gmail.com",
     license="MIT",
     package_dir={"": "python"},
     packages=find_packages(where="python"),
