@@ -3,6 +3,12 @@
 #include <iostream>
 #include <utility>
 
+#if __has_include(<wgpu.h>)
+#include <wgpu.h>
+#elif __has_include("wgpu.h")
+#include "wgpu.h"
+#endif
+
 #if __has_include(<GLFW/glfw3.h>)
 #include <GLFW/glfw3.h>
 #if defined(__linux__)
@@ -22,6 +28,8 @@ struct Uniforms {
     lightColor: vec4<f32>,
     cameraPos: vec4<f32>,
     ambientColor: vec4<f32>,
+    albedoColor: vec4<f32>,
+    materialParams: vec4<f32>, // x=metallic, y=roughness, z=emissive
     time: f32,
 };
 
@@ -44,6 +52,36 @@ struct VertexOutput {
     @location(3) color: vec4<f32>,
 };
 
+const PI: f32 = 3.14159265359;
+
+fn distributionGGX(N: vec3<f32>, H: vec3<f32>, roughness: f32) -> f32 {
+    let a = roughness * roughness;
+    let a2 = a * a;
+    let NdotH = max(dot(N, H), 0.0);
+    let NdotH2 = NdotH * NdotH;
+    let num = a2;
+    let denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    return num / (PI * denom * denom);
+}
+
+fn geometrySchlickGGX(NdotV: f32, roughness: f32) -> f32 {
+    let r = (roughness + 1.0);
+    let k = (r * r) / 8.0;
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+fn geometrySmith(N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, roughness: f32) -> f32 {
+    let NdotV = max(dot(N, V), 0.0);
+    let NdotL = max(dot(N, L), 0.0);
+    let ggx2 = geometrySchlickGGX(NdotV, roughness);
+    let ggx1 = geometrySchlickGGX(NdotL, roughness);
+    return ggx1 * ggx2;
+}
+
+fn fresnelSchlick(cosTheta: f32, F0: vec3<f32>) -> vec3<f32> {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
@@ -62,21 +100,46 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let N = normalize(in.normal);
-    let L = normalize(ubo.lightDir.xyz);
     let V = normalize(ubo.cameraPos.xyz - in.worldPos);
-    let H = normalize(L + V);
+    let L = normalize(ubo.lightDir.xyz);
+    let H = normalize(V + L);
 
     let texColor = textureSample(textureData, textureSampler, in.uv);
-    let baseColor = in.color * texColor;
+    let albedo = in.color.rgb * ubo.albedoColor.rgb * texColor.rgb;
+    let metallic = clamp(ubo.materialParams.x, 0.0, 1.0);
+    let roughness = clamp(ubo.materialParams.y, 0.05, 1.0);
+    let emissive = ubo.materialParams.z;
 
-    let ambient = ubo.ambientColor.rgb * baseColor.rgb;
-    let diff = max(dot(N, L), 0.0);
-    let diffuse = diff * ubo.lightColor.rgb * baseColor.rgb;
-    let spec = pow(max(dot(N, H), 0.0), 32.0);
-    let specular = spec * ubo.lightColor.rgb * 0.3;
+    var F0 = vec3<f32>(0.04);
+    F0 = mix(F0, albedo, metallic);
 
-    let finalColor = ambient + diffuse + specular;
-    return vec4<f32>(finalColor, baseColor.a);
+    // Cook-Torrance BRDF
+    let NDF = distributionGGX(N, H, roughness);
+    let G = geometrySmith(N, V, L, roughness);
+    let F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+    let numerator = NDF * G * F;
+    let denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+    let specular = numerator / denominator;
+
+    let kS = F;
+    var kD = vec3<f32>(1.0) - kS;
+    kD *= 1.0 - metallic;
+
+    let NdotL = max(dot(N, L), 0.0);
+    let radiance = ubo.lightColor.rgb;
+
+    let Lo = (kD * albedo / PI + specular) * radiance * NdotL;
+    let ambient = ubo.ambientColor.rgb * albedo;
+    let emissiveCol = albedo * emissive;
+
+    let color = ambient + Lo + emissiveCol;
+
+    // Tone mapping and gamma correction
+    let mapped = color / (color + vec3<f32>(1.0));
+    let finalColor = pow(mapped, vec3<f32>(1.0 / 2.2));
+
+    return vec4<f32>(finalColor, in.color.a * texColor.a * ubo.albedoColor.a);
 }
 )";
 
@@ -188,6 +251,186 @@ bool WebGpuBackend::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
     return true;
 }
 
+OffscreenTarget WebGpuBackend::createOffscreenTarget(uint32_t width, uint32_t height) noexcept
+{
+    if (!_device || width == 0 || height == 0) return {};
+
+    OffscreenTarget target{};
+    target.width = width;
+    target.height = height;
+
+    // 1. Create Offscreen Color Texture
+    WGPUTextureDescriptor colorDesc{};
+    colorDesc.dimension = WGPUTextureDimension_2D;
+    colorDesc.size = WGPUExtent3D{ width, height, 1 };
+    colorDesc.mipLevelCount = 1;
+    colorDesc.sampleCount = 1;
+    colorDesc.format = WGPUTextureFormat_BGRA8Unorm;
+    colorDesc.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopySrc | WGPUTextureUsage_TextureBinding;
+
+    target.colorTexture = wgpuDeviceCreateTexture(_device, &colorDesc);
+
+    WGPUTextureViewDescriptor colorViewDesc{};
+    colorViewDesc.format = WGPUTextureFormat_BGRA8Unorm;
+    colorViewDesc.dimension = WGPUTextureViewDimension_2D;
+    colorViewDesc.baseMipLevel = 0;
+    colorViewDesc.mipLevelCount = 1;
+    colorViewDesc.baseArrayLayer = 0;
+    colorViewDesc.arrayLayerCount = 1;
+    colorViewDesc.aspect = WGPUTextureAspect_All;
+
+    target.colorView = wgpuTextureCreateView(target.colorTexture, &colorViewDesc);
+
+    // 2. Create Offscreen Depth Buffer Texture
+    WGPUTextureDescriptor depthDesc{};
+    depthDesc.dimension = WGPUTextureDimension_2D;
+    depthDesc.size = WGPUExtent3D{ width, height, 1 };
+    depthDesc.mipLevelCount = 1;
+    depthDesc.sampleCount = 1;
+    depthDesc.format = WGPUTextureFormat_Depth24Plus;
+    depthDesc.usage = WGPUTextureUsage_RenderAttachment;
+
+    target.depthTexture = wgpuDeviceCreateTexture(_device, &depthDesc);
+
+    WGPUTextureViewDescriptor depthViewDesc{};
+    depthViewDesc.format = WGPUTextureFormat_Depth24Plus;
+    depthViewDesc.dimension = WGPUTextureViewDimension_2D;
+    depthViewDesc.baseMipLevel = 0;
+    depthViewDesc.mipLevelCount = 1;
+    depthViewDesc.baseArrayLayer = 0;
+    depthViewDesc.arrayLayerCount = 1;
+    depthViewDesc.aspect = WGPUTextureAspect_DepthOnly;
+
+    target.depthView = wgpuTextureCreateView(target.depthTexture, &depthViewDesc);
+
+    // 3. Create CPU Staging Buffer for Texture Readback
+    uint32_t unalignedBytesPerRow = width * 4;
+    target.bytesPerRow = (unalignedBytesPerRow + 255) & ~255;
+    target.bufferSize = target.bytesPerRow * height;
+
+    WGPUBufferDescriptor bufDesc{};
+    bufDesc.size = target.bufferSize;
+    bufDesc.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+    bufDesc.mappedAtCreation = false;
+
+    target.stagingBuffer = wgpuDeviceCreateBuffer(_device, &bufDesc);
+    target.isValid = (target.colorView != nullptr && target.depthView != nullptr && target.stagingBuffer != nullptr);
+
+    return target;
+}
+
+bool WebGpuBackend::copyOffscreenToStaging(const OffscreenTarget& target) noexcept
+{
+    if (!target.isValid || !target.stagingBuffer || !target.colorTexture || !_device || !_queue) {
+        return false;
+    }
+
+    WGPUCommandEncoderDescriptor encDesc{};
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(_device, &encDesc);
+
+    WGPUImageCopyTexture src{};
+    src.texture = target.colorTexture;
+    src.mipLevel = 0;
+    src.origin = WGPUOrigin3D{ 0, 0, 0 };
+    src.aspect = WGPUTextureAspect_All;
+
+    WGPUImageCopyBuffer dst{};
+    dst.buffer = target.stagingBuffer;
+    dst.layout.offset = 0;
+    dst.layout.bytesPerRow = target.bytesPerRow;
+    dst.layout.rowsPerImage = target.height;
+
+    WGPUExtent3D copySize{ target.width, target.height, 1 };
+    wgpuCommandEncoderCopyTextureToBuffer(encoder, &src, &dst, &copySize);
+
+    WGPUCommandBufferDescriptor cmdDesc{};
+    WGPUCommandBuffer cmdBuf = wgpuCommandEncoderFinish(encoder, &cmdDesc);
+    wgpuQueueSubmit(_queue, 1, &cmdBuf);
+
+    wgpuCommandBufferRelease(cmdBuf);
+    wgpuCommandEncoderRelease(encoder);
+    return true;
+}
+
+std::vector<uint8_t> WebGpuBackend::readOffscreenPixels(const OffscreenTarget& target) noexcept
+{
+    if (!copyOffscreenToStaging(target)) return {};
+
+    std::vector<uint8_t> pixels;
+    pixels.reserve(target.width * target.height * 4);
+
+    struct MapContext { bool done = false; WGPUBufferMapAsyncStatus status = WGPUBufferMapAsyncStatus_Unknown; };
+    MapContext ctx{};
+
+    wgpuBufferMapAsync(
+        target.stagingBuffer,
+        WGPUMapMode_Read,
+        0,
+        target.bufferSize,
+        [](WGPUBufferMapAsyncStatus status, void* userdata) {
+            auto* c = static_cast<MapContext*>(userdata);
+            c->status = status;
+            c->done = true;
+        },
+        &ctx
+    );
+
+    wgpuDevicePoll(_device, true, nullptr);
+
+    if (ctx.done && ctx.status == WGPUBufferMapAsyncStatus_Success) {
+        const uint8_t* mappedData = static_cast<const uint8_t*>(
+            wgpuBufferGetConstMappedRange(target.stagingBuffer, 0, target.bufferSize)
+        );
+
+        if (mappedData) {
+            for (uint32_t y = 0; y < target.height; ++y) {
+                const uint8_t* row = mappedData + y * target.bytesPerRow;
+                for (uint32_t x = 0; x < target.width; ++x) {
+                    uint8_t b = row[x * 4 + 0];
+                    uint8_t g = row[x * 4 + 1];
+                    uint8_t r = row[x * 4 + 2];
+                    uint8_t a = row[x * 4 + 3];
+                    pixels.push_back(r);
+                    pixels.push_back(g);
+                    pixels.push_back(b);
+                    pixels.push_back(a);
+                }
+            }
+            wgpuBufferUnmap(target.stagingBuffer);
+        }
+    }
+
+    return pixels;
+}
+
+void WebGpuBackend::destroyOffscreenTarget(OffscreenTarget& target) noexcept
+{
+    if (target.stagingBuffer) {
+        wgpuBufferDestroy(target.stagingBuffer);
+        wgpuBufferRelease(target.stagingBuffer);
+        target.stagingBuffer = nullptr;
+    }
+    if (target.colorView) {
+        wgpuTextureViewRelease(target.colorView);
+        target.colorView = nullptr;
+    }
+    if (target.colorTexture) {
+        wgpuTextureDestroy(target.colorTexture);
+        wgpuTextureRelease(target.colorTexture);
+        target.colorTexture = nullptr;
+    }
+    if (target.depthView) {
+        wgpuTextureViewRelease(target.depthView);
+        target.depthView = nullptr;
+    }
+    if (target.depthTexture) {
+        wgpuTextureDestroy(target.depthTexture);
+        wgpuTextureRelease(target.depthTexture);
+        target.depthTexture = nullptr;
+    }
+    target.isValid = false;
+}
+
 void WebGpuBackend::setClearColor(double r, double g, double b, double a) noexcept
 {
     _clearColor = WGPUColor{ r, g, b, a };
@@ -296,11 +539,19 @@ WGPUBindGroup WebGpuBackend::createBindGroup(const Texture& texture) noexcept
     return wgpuDeviceCreateBindGroup(_device, &bgDesc);
 }
 
-void WebGpuBackend::drawMesh(const Mesh& mesh, const Texture& texture, const math::Mat4& modelMatrix) noexcept
+void WebGpuBackend::drawMesh(
+    const Mesh& mesh,
+    const Texture& texture,
+    const math::Mat4& modelMatrix,
+    const Material& material
+) noexcept
 {
     if (!_inFrame || !_currentPass || !mesh.isValid()) return;
 
     _currentUbo.model = modelMatrix;
+    _currentUbo.albedoColor = material.albedo;
+    _currentUbo.materialParams = math::Vec4{material.metallic, material.roughness, material.emissive, 0.0f};
+
     wgpuQueueWriteBuffer(_queue, _uniformBuffer, 0, &_currentUbo, sizeof(UniformBufferObject));
 
     WGPUBindGroup bindGroup = createBindGroup(texture);
@@ -344,12 +595,6 @@ void WebGpuBackend::endFrame() noexcept
     _currentEncoder = nullptr;
 
     _inFrame = false;
-}
-
-void WebGpuBackend::renderFrame(double deltaTime) noexcept
-{
-    (void)deltaTime;
-    // Legacy call shim
 }
 
 void WebGpuBackend::shutdown() noexcept

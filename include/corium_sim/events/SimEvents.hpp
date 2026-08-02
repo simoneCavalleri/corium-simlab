@@ -1,28 +1,31 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <variant>
 #include <corium/Events.hpp>
 #include <corium/ui/WindowEvents.hpp>
 
+#include <vector>
+
 namespace corium_sim {
 
-/// @brief Event emitted when high-frequency telemetry/sensor data is received from a simulation background thread.
-struct TelemetryDataEvent {
-    uint32_t sensorId = 0;
-    double timestamp = 0.0;
-    float value = 0.0f;
-    uint32_t sampleCount = 0;
-};
-
-/// @brief Event emitted when an autonomous agent/robot pose is updated in the simulation world.
-struct AgentPoseEvent {
-    uint32_t agentId = 0;
+/// @brief Event emitted to request loading a 3D asset into the simulation environment.
+struct MeshLoadEvent {
+    std::string assetPath{};
+    uint32_t assetId = 0;
+    float scale = 1.0f;
     float posX = 0.0f, posY = 0.0f, posZ = 0.0f;
-    float rotX = 0.0f, rotY = 0.0f, rotZ = 0.0f, rotW = 1.0f;
 };
 
-/// @brief Event emitted when the 3D viewport camera position or orientation is modified.
+/// @brief Event emitted to command or position the 3D simulation camera.
+struct CameraCommandEvent {
+    float eyeX = 0.0f, eyeY = 5.0f, eyeZ = 10.0f;
+    float targetX = 0.0f, targetY = 0.0f, targetZ = 0.0f;
+    float fovDegrees = 60.0f;
+};
+
+/// @brief Event emitted when the 3D viewport camera state updates.
 struct CameraUpdateEvent {
     float eyeX = 0.0f, eyeY = 5.0f, eyeZ = 10.0f;
     float targetX = 0.0f, targetY = 0.0f, targetZ = 0.0f;
@@ -35,6 +38,43 @@ struct SimStepEvent {
     double deltaTime = 0.0;
 };
 
+/// @brief Event emitted to reset the agent training environment state.
+struct SimResetEvent {
+    uint64_t episodeIndex = 0;
+    uint64_t seed = 0;
+};
+
+/// @brief Event emitted to command an agent with linear and angular movement actions.
+struct AgentActionCommand {
+    uint32_t agentId = 0;
+    float moveForward = 0.0f; // Linear velocity forward/backward
+    float turnYaw = 0.0f;     // Angular velocity yaw
+    float moveUp = 0.0f;      // Vertical velocity
+    bool resetEpisode = false;
+};
+
+/// @brief Zero-heap event emitted on each simulation step containing agent state, observations, and rewards.
+struct AgentObservationEvent {
+    uint32_t agentId = 0;
+    float posX = 0.0f, posY = 0.0f, posZ = 0.0f;
+    float velX = 0.0f, velY = 0.0f, velZ = 0.0f;
+    float targetX = 0.0f, targetY = 0.0f, targetZ = 0.0f;
+    float distanceToTarget = 0.0f;
+    float reward = 0.0f;
+    bool isTerminated = false;
+    bool isTruncated = false;
+    uint64_t stepIndex = 0;
+};
+
+/// @brief Event emitted when an onboard visual sensor camera captures an offscreen frame payload.
+struct SensorFrameEvent {
+    uint32_t sensorId = 0;
+    uint32_t width = 128;
+    uint32_t height = 128;
+    uint64_t stepIndex = 0;
+    std::vector<uint8_t> rgbData{};
+};
+
 /// @brief Combined default variant list of core Corium events, UI events, and Simulation events.
 using DefaultSimEvents = std::variant<
     corium::QuitEvent,
@@ -43,15 +83,28 @@ using DefaultSimEvents = std::variant<
     corium::ErrorEvent,
     corium::SignalEvent,
     corium::ui::WindowResizeEvent,
+    corium::ui::WindowMoveEvent,
+    corium::ui::FramebufferResizeEvent,
+    corium::ui::WindowMinimizeEvent,
+    corium::ui::WindowMaximizeEvent,
+    corium::ui::WindowFocusEvent,
+    corium::ui::WindowRefreshEvent,
+    corium::ui::WindowContentScaleEvent,
+    corium::ui::WindowCloseEvent,
     corium::ui::MouseMoveEvent,
     corium::ui::MouseButtonEvent,
+    corium::ui::MouseScrollEvent,
+    corium::ui::MouseEnterEvent,
     corium::ui::KeyEvent,
-    corium::ui::WindowFocusEvent,
-    corium::ui::WindowCloseEvent,
-    TelemetryDataEvent,
-    AgentPoseEvent,
+    corium::ui::CharEvent,
+    MeshLoadEvent,
+    CameraCommandEvent,
     CameraUpdateEvent,
-    SimStepEvent
+    SimStepEvent,
+    SimResetEvent,
+    AgentActionCommand,
+    AgentObservationEvent,
+    SensorFrameEvent
 >;
 
 } // namespace corium_sim

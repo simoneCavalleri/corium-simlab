@@ -27,7 +27,7 @@ corium-simlab/
 │   └── corium_sim/
 │       ├── App.hpp                  # SimLabApp product application class
 │       ├── events/
-│       │   └── SimEvents.hpp        # Telemetry, AgentPose, Camera, SimStep events
+│       │   └── SimEvents.hpp        # Telemetry, Camera, SimStep events
 │       ├── renderer/
 │       │   └── WebGpuBackend.hpp    # WebGPU backend declaration
 │       └── services/

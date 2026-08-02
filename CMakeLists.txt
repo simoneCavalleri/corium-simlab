@@ -50,9 +50,13 @@ find_library(WGPU_NATIVE_LIB NAMES wgpu_native libwgpu_native.so PATHS ${wgpu_na
 add_library(corium_sim_core STATIC
     src/renderer/Camera.cpp
     src/renderer/Mesh.cpp
+    src/renderer/MeshLoader.cpp
+    src/renderer/SensorCamera.cpp
     src/renderer/Texture.cpp
     src/renderer/WebGpuBackend.cpp
-    src/services/TelemetryService.cpp
+    src/scene/SimScene.cpp
+    src/scene/SceneBuilder.cpp
+    src/physics/PhysicsEngine.cpp
     src/App.cpp
 )
 

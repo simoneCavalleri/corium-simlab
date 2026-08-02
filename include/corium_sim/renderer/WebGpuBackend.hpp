@@ -3,6 +3,7 @@
 #include <cstdint>
 #include "corium_sim/math/Math.hpp"
 #include "corium_sim/renderer/Camera.hpp"
+#include "corium_sim/renderer/Material.hpp"
 #include "corium_sim/renderer/Mesh.hpp"
 #include "corium_sim/renderer/Texture.hpp"
 #include "corium_sim/renderer/Uniforms.hpp"
@@ -21,6 +22,20 @@ struct GLFWwindow;
 
 namespace corium_sim::renderer {
 
+/// @brief WebGPU Offscreen Render Target for Agent Visual Sensors (RGB & Depth).
+struct OffscreenTarget {
+    WGPUTexture colorTexture = nullptr;
+    WGPUTextureView colorView = nullptr;
+    WGPUTexture depthTexture = nullptr;
+    WGPUTextureView depthView = nullptr;
+    WGPUBuffer stagingBuffer = nullptr;
+    uint32_t width = 128;
+    uint32_t height = 128;
+    uint32_t bytesPerRow = 0;
+    uint32_t bufferSize = 0;
+    bool isValid = false;
+};
+
 /// @brief WebGPU 3D Rendering Engine Backend.
 /// Manages WebGPU Swapchain, Depth Buffer, WGSL Shaders, Pipeline Layout, BindGroups, and Render Pass.
 class WebGpuBackend {
@@ -37,6 +52,18 @@ public:
     /// @brief Initialize WebGPU context, Depth Buffer, Pipeline, Default Textures, and WGSL Shaders.
     bool initialize(GLFWwindow* windowHandle, uint32_t width, uint32_t height);
 
+    /// @brief Create an Offscreen Render Target for agent visual cameras.
+    OffscreenTarget createOffscreenTarget(uint32_t width = 128, uint32_t height = 128) noexcept;
+
+    /// @brief Copy offscreen color texture to CPU staging buffer.
+    bool copyOffscreenToStaging(const OffscreenTarget& target) noexcept;
+
+    /// @brief Read raw RGBA8 pixel payload from offscreen render target to CPU buffer.
+    std::vector<uint8_t> readOffscreenPixels(const OffscreenTarget& target) noexcept;
+
+    /// @brief Release and destroy an Offscreen Render Target.
+    void destroyOffscreenTarget(OffscreenTarget& target) noexcept;
+
     /// @brief Set background clear color for render pass.
     void setClearColor(double r, double g, double b, double a = 1.0) noexcept;
 
@@ -46,14 +73,16 @@ public:
     /// @brief Begin 3D Render Pass frame with Camera setup.
     bool beginFrame(const Camera& camera, float time = 0.0f) noexcept;
 
-    /// @brief Render 3D Mesh with specified Texture and Model Transformation Matrix.
-    void drawMesh(const Mesh& mesh, const Texture& texture, const math::Mat4& modelMatrix) noexcept;
+    /// @brief Render 3D Mesh with specified Texture, Model Matrix, and PBR Material.
+    void drawMesh(
+        const Mesh& mesh,
+        const Texture& texture,
+        const math::Mat4& modelMatrix,
+        const Material& material = {}
+    ) noexcept;
 
     /// @brief End Render Pass, submit command buffer, and present surface.
     void endFrame() noexcept;
-
-    /// @brief Legacy simple render pass method.
-    void renderFrame(double deltaTime) noexcept;
 
     /// @brief Shutdown WebGPU resources cleanly.
     void shutdown() noexcept;
