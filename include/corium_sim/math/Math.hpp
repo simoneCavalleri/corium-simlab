@@ -44,6 +44,18 @@ struct Vec3 {
         if (len > 1e-6f) return *this / len;
         return {0.0f, 0.0f, 0.0f};
     }
+
+    static constexpr Vec3 cross(const Vec3& a, const Vec3& b) noexcept {
+        return {
+            a.y * b.z - a.z * b.y,
+            a.z * b.x - a.x * b.z,
+            a.x * b.y - a.y * b.x
+        };
+    }
+
+    static constexpr float dot(const Vec3& a, const Vec3& b) noexcept {
+        return a.x * b.x + a.y * b.y + a.z * b.z;
+    }
 };
 
 inline constexpr float dot(const Vec3& a, const Vec3& b) noexcept {

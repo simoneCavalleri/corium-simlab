@@ -1,6 +1,4 @@
-#include "corium_sim/renderer/Mesh.hpp"
-#include <cmath>
-#include <utility>
+#include "corium_sim/renderer/MeshLoader.hpp"
 
 namespace corium_sim::renderer {
 
@@ -98,6 +96,20 @@ void Mesh::render(WGPURenderPassEncoder passEncoder) const noexcept
     wgpuRenderPassEncoderSetVertexBuffer(passEncoder, 0, _vertexBuffer, 0, sizeof(Vertex) * _vertexCount);
     wgpuRenderPassEncoderSetIndexBuffer(passEncoder, _indexBuffer, WGPUIndexFormat_Uint32, 0, sizeof(uint32_t) * _indexCount);
     wgpuRenderPassEncoderDrawIndexed(passEncoder, _indexCount, 1, 0, 0, 0);
+}
+
+bool Mesh::loadFromOBJ(WGPUDevice device, WGPUQueue queue, const std::string& filePath)
+{
+    MeshData data = MeshLoader::parseOBJFile(filePath);
+    if (!data.success) return false;
+    return upload(device, queue, data.vertices, data.indices);
+}
+
+Mesh Mesh::createFromOBJ(WGPUDevice device, WGPUQueue queue, const std::string& filePath)
+{
+    Mesh mesh;
+    mesh.loadFromOBJ(device, queue, filePath);
+    return mesh;
 }
 
 // -----------------------------------------------------------------------------
