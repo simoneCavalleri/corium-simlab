@@ -1,5 +1,6 @@
 #include "corium_sim/renderer/WebGpuBackend.hpp"
 #include "corium_sim/renderer/WgslShaders.hpp"
+#include "corium_sim/scene/SimScene.hpp"
 #include "corium_sim/Log.hpp"
 
 #include <iostream>
@@ -213,6 +214,66 @@ OffscreenTarget WebGpuBackend::createOffscreenTarget(uint32_t width, uint32_t he
     target.isValid = (target.colorView != nullptr && target.depthView != nullptr && target.stagingBuffer != nullptr);
 
     return target;
+}
+
+void WebGpuBackend::renderOffscreen(const OffscreenTarget& target, const Camera& camera, const scene::SimScene& scene) noexcept
+{
+    if (!_initialized || !target.isValid || !target.colorView || !target.depthView || !_device || !_queue) return;
+
+    _frameCount++;
+    _currentUboIndex = 0;
+
+    _currentUbo.viewProj = camera.getViewProjectionMatrix();
+    math::Vec3 camPos = camera.getPosition();
+    _currentUbo.cameraPos = math::Vec4{camPos.x, camPos.y, camPos.z, 1.0f};
+    _currentUbo.time = 0.0f;
+
+    WGPUCommandEncoderDescriptor encoderDesc{};
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(_device, &encoderDesc);
+
+    WGPURenderPassColorAttachment colorAttachment{};
+    colorAttachment.view = target.colorView;
+    colorAttachment.loadOp = WGPULoadOp_Clear;
+    colorAttachment.storeOp = WGPUStoreOp_Store;
+    colorAttachment.clearValue = _clearColor;
+
+    WGPURenderPassDepthStencilAttachment depthAttachment{};
+    depthAttachment.view = target.depthView;
+    depthAttachment.depthClearValue = 1.0f;
+    depthAttachment.depthLoadOp = WGPULoadOp_Clear;
+    depthAttachment.depthStoreOp = WGPUStoreOp_Store;
+
+    WGPURenderPassDescriptor passDesc{};
+    passDesc.colorAttachmentCount = 1;
+    passDesc.colorAttachments = &colorAttachment;
+    passDesc.depthStencilAttachment = &depthAttachment;
+
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
+    wgpuRenderPassEncoderSetPipeline(pass, _pipeline);
+
+    _currentEncoder = encoder;
+    _currentPass = pass;
+    _inFrame = true;
+
+    for (const auto& entity : scene.entities()) {
+        if (entity.mesh.isValid()) {
+            drawMesh(entity.mesh, entity.texture, entity.transformMatrix(), entity.material);
+        }
+    }
+
+    wgpuRenderPassEncoderEnd(pass);
+    _inFrame = false;
+
+    WGPUCommandBufferDescriptor cmdDesc{};
+    WGPUCommandBuffer cmdBuf = wgpuCommandEncoderFinish(encoder, &cmdDesc);
+    wgpuQueueSubmit(_queue, 1, &cmdBuf);
+
+    wgpuCommandBufferRelease(cmdBuf);
+    wgpuRenderPassEncoderRelease(pass);
+    wgpuCommandEncoderRelease(encoder);
+
+    _currentPass = nullptr;
+    _currentEncoder = nullptr;
 }
 
 bool WebGpuBackend::copyOffscreenToStaging(const OffscreenTarget& target) noexcept

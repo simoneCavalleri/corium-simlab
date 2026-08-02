@@ -183,7 +183,17 @@ PYBIND11_MODULE(corium_sim_py, m) {
             if (!self.renderer().isInitialized()) {
                 self.renderer().initialize(nullptr, 1280, 720);
             }
-            auto pixels = self.renderer().readOffscreenPixels(self.renderer().createOffscreenTarget(128, 128));
+            scene::SimEntity* agent = self.scene().findEntity("agent_robot");
+            if (!agent) agent = self.scene().findEntity("robot_agent");
+            if (agent) {
+                self.sensorCamera().updateMountPose(agent->position, agent->rotation);
+            }
+
+            auto target = self.renderer().createOffscreenTarget(128, 128);
+            self.renderer().renderOffscreen(target, self.sensorCamera().camera(), self.scene());
+            auto pixels = self.renderer().readOffscreenPixels(target);
+            self.renderer().destroyOffscreenTarget(target);
+
             uint32_t w = self.sensorCamera().width();
             uint32_t h = self.sensorCamera().height();
 
@@ -197,7 +207,17 @@ PYBIND11_MODULE(corium_sim_py, m) {
             if (!self.renderer().isInitialized()) {
                 self.renderer().initialize(nullptr, 1280, 720);
             }
-            auto pixels = self.renderer().readOffscreenPixels(self.renderer().createOffscreenTarget(128, 128));
+            scene::SimEntity* agent = self.scene().findEntity("agent_robot");
+            if (!agent) agent = self.scene().findEntity("robot_agent");
+            if (agent) {
+                self.sensorCamera().updateMountPose(agent->position, agent->rotation);
+            }
+
+            auto target = self.renderer().createOffscreenTarget(128, 128);
+            self.renderer().renderOffscreen(target, self.sensorCamera().camera(), self.scene());
+            auto pixels = self.renderer().readOffscreenPixels(target);
+            self.renderer().destroyOffscreenTarget(target);
+
             uint32_t w = self.sensorCamera().width();
             uint32_t h = self.sensorCamera().height();
 

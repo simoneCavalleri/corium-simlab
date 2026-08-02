@@ -10,6 +10,7 @@ SensorCamera::SensorCamera(uint32_t width, uint32_t height, float fovDegrees)
 {
     _camera.setViewportSize(_width, _height);
     _camera.setFov(_fov);
+    _camera.setEyeAndTarget(Vec3{4.0f, 4.0f, 6.0f}, Vec3{0.0f, 1.0f, 0.0f});
 }
 
 void SensorCamera::setResolution(uint32_t width, uint32_t height) noexcept
