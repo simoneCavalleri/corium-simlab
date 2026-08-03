@@ -100,24 +100,10 @@ int main(int argc, char** argv)
             .position = {0.0f, 0.5f, 0.0f},
             .mass = 15.0f
         })
-        // Pillar 3: Onboard Sensors (IMU + 180-Degree Custom LiDAR Raycaster)
+        // Pillar 3: Onboard Sensors (IMU + 180-Ray LiDAR)
         .withSensors(
             sensors::ImuSensor{},
-            sensors::makeCustomSensor<180>([](const SimEntity& agent, const SimScene& scene) {
-                std::array<float, 180> scan{};
-                float yawRad = agent.rotation.y * DEG2RAD;
-                Vec3 origin = agent.position + Vec3{0.0f, 0.5f, 0.0f};
-
-                for (int i = 0; i < 180; ++i) {
-                    float angleDeg = static_cast<float>(i - 90);
-                    float rayAngle = yawRad + angleDeg * DEG2RAD;
-                    Vec3 dir{std::sin(rayAngle), 0.0f, std::cos(rayAngle)};
-
-                    auto hit = Raycast::castRay(scene, origin, dir, 20.0f);
-                    scan[i] = hit.hit ? hit.distance : 20.0f;
-                }
-                return scan;
-            })
+            sensors::LidarSensor<180>{}
         )
         // Pillar 4: Perception Chain — fuse [posX, posZ, yawDeg, minLidarDist]
         // ImuSensor layout: [0]=pos.x [1]=pos.y [2]=pos.z
@@ -145,52 +131,44 @@ int main(int argc, char** argv)
         .withPolicy(AmrGoalSeekingPolicy{4.0f, -2.0f});
 
     // -------------------------------------------------------------------------
-    // 2. CONSTRUCT 3D WEBGPU VISUAL INCUBATOR SCENE & SPAWN AGENT
+    // 2. CONSTRUCT 3D WEBGPU VISUAL ARENA SCENE & SPAWN AGENT
     // -------------------------------------------------------------------------
-    std::cout << "[Step 2] Constructing 3D WebGPU Visual Scene & Spawning Agent...\n";
+    std::cout << "[Step 2] Constructing 3D WebGPU Visual Arena & Spawning Agent...\n";
 
-    auto incubator = makeIncubator<KinematicPhysicsEngine>()
-        // Pillar 1: Environment & 3D Visual Scene Setup
-        .withEnvironment([](SimScene& scene) {
-            scene.addEntity(SimEntity{.name = "user_ground", .shape = EntityShape::PlaneGrid, .isStatic = true});
-            scene.addEntity(SimEntity{
-                .name = "target_goal",
-                .material = Material::Metallic({0.95f, 0.15f, 0.15f, 1.0f}, 0.20f),
-                .position = {4.0f, 0.75f, -2.0f},
-                .scale = {1.2f, 1.2f, 1.2f},
-                .isStatic = true
-            });
-            scene.addEntity(SimEntity{
-                .name = "safety_barrier",
-                .material = Material::Matte({0.95f, 0.80f, 0.05f, 1.0f}),
-                .position = {-2.5f, 0.6f, 2.5f},
-                .scale = {3.5f, 1.2f, 0.2f},
-                .isStatic = true
-            });
-        })
-        .spawnAgent("amr_leader", std::move(amrAgentSpec), Vec3{0.0f, 0.5f, 0.0f})
-        // Pillar 7: Reward Policy
-        .withRewardPolicy(
-            RewardBuilder{}
-                .withTarget({4.0f, 0.75f, -2.0f})
-                .withGoalThreshold(0.6f)
-                .addTerm<DistanceToGoalPenalty>(1.0f)
-                .addTerm<CollisionPenalty>(50.0f)
-                .addTerm<GoalReachedBonus>(200.0f, 0.6f)
-        );
+    // Attach SimArena directly to WebGPU App in a single fluent pipeline
+    app.attachArena(
+        makeArena<KinematicPhysicsEngine>()
+            // Pillar 1: Environment & 3D Visual Scene Setup
+            .withEnvironment([](SimScene& scene) {
+                scene.addEntity(SimEntity{.name = "user_ground", .shape = EntityShape::PlaneGrid, .isStatic = true});
+                scene.addEntity(SimEntity{
+                    .name = "target_goal",
+                    .material = Material::Metallic({0.95f, 0.15f, 0.15f, 1.0f}, 0.20f),
+                    .position = {4.0f, 0.75f, -2.0f},
+                    .scale = {1.2f, 1.2f, 1.2f},
+                    .isStatic = true
+                });
+                scene.addEntity(SimEntity{
+                    .name = "safety_barrier",
+                    .material = Material::Matte({0.95f, 0.80f, 0.05f, 1.0f}),
+                    .position = {-2.5f, 0.6f, 2.5f},
+                    .scale = {3.5f, 1.2f, 0.2f},
+                    .isStatic = true
+                });
+            })
+            .spawnAgent("amr_leader", std::move(amrAgentSpec), Vec3{0.0f, 0.5f, 0.0f})
+            // Pillar 7: Reward Policy
+            .withRewardPolicy(
+                RewardBuilder{}
+                    .withTarget({4.0f, 0.75f, -2.0f})
+                    .withGoalThreshold(0.6f)
+                    .addTerm<DistanceToGoalPenalty>(1.0f)
+                    .addTerm<CollisionPenalty>(50.0f)
+                    .addTerm<GoalReachedBonus>(200.0f, 0.6f)
+            )
+    );
 
-    auto incubatorPtr = std::make_shared<decltype(incubator)>(std::move(incubator));
-
-    // Connect shared 3D scene to generic WebGPU App
-    app.setScene(incubatorPtr->scenePtr());
-
-    // Register high-frequency step callback for real-time WebGPU rendering & active agent navigation
-    app.onStep([incubatorPtr](SimLabApp&, float dt) {
-        auto result = incubatorPtr->step(dt);
-        (void)result;
-    });
-
-    std::cout << "  - 3D WebGPU Visual Environment initialized successfully!\n";
+    std::cout << "  - 3D WebGPU Visual Arena Environment initialized successfully!\n";
     std::cout << "  - Interactive 3D Window: Orbit/Pan Camera with WASD & Mouse!\n\n";
 
     // -------------------------------------------------------------------------
@@ -200,6 +178,6 @@ int main(int argc, char** argv)
     app.run(runtime);
 
     runtime.shutdown();
-    std::cout << "\n[Incubator] 3D Visual Physical Agent Incubator application shutdown complete.\n";
+    std::cout << "\n[SimArena] 3D Visual Physical Agent Simulation application shutdown complete.\n";
     return 0;
 }

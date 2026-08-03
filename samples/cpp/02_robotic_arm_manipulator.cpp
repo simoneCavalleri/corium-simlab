@@ -87,7 +87,7 @@ int main(int argc, char** argv)
     // -------------------------------------------------------------------------
     std::cout << "[Step 2] Constructing Industrial Workstation Scene & Spawning Robot Arm...\n";
 
-    auto incubator = makeIncubator<KinematicPhysicsEngine>()
+    auto arena = makeArena<KinematicPhysicsEngine>()
         // Pillar 1: Environment & 3D Scene Definition
         .withEnvironment([](SimScene& scene) {
             // Factory Floor Grid
@@ -143,20 +143,16 @@ int main(int argc, char** argv)
                 .addTerm<GoalReachedBonus>(100.0f)
         );
 
-    auto incubatorPtr = std::make_shared<decltype(incubator)>(std::move(incubator));
+    auto arenaPtr = std::make_shared<decltype(arena)>(std::move(arena));
 
-    // Connect shared 3D scene to generic WebGPU App
-    app.setScene(incubatorPtr->scenePtr());
+    // Connect shared 3D scene & arena to WebGPU App
+    app.attachArena(arenaPtr);
 
-    // Register high-frequency step callback for real-time WebGPU rendering & joint actuation
-    app.onStep([incubatorPtr](SimLabApp& app, float dt) {
-        // Step incubator (runs policy and joint actuation)
-        auto result = incubatorPtr->step(dt);
-        (void)result;
+    // Register additional joint target synchronization callback
+    app.onStep([arenaPtr](SimLabApp& app, float dt) {
+        (void)arenaPtr->step(dt);
 
-        // Synchronize target positions from JointPositionActuator to SimJoints
-        auto jointTargets = incubatorPtr->agent().actuators().template getActuator<0>().targetPositions();
-
+        auto jointTargets = arenaPtr->agent().actuators().template getActuator<0>().targetPositions();
         if (jointTargets.size() >= 3) {
             if (auto* jBase     = app.scene().findJoint("joint_base"))     jBase->position     = jointTargets[0];
             if (auto* jShoulder = app.scene().findJoint("joint_shoulder")) jShoulder->position = jointTargets[1];
@@ -173,6 +169,6 @@ int main(int argc, char** argv)
     app.run(runtime);
 
     runtime.shutdown();
-    std::cout << "\n[Incubator] Industrial Robot Arm application shutdown complete.\n";
+    std::cout << "\n[SimArena] Industrial Robot Arm application shutdown complete.\n";
     return 0;
 }
