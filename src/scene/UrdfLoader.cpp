@@ -1,4 +1,5 @@
 #include "corium_sim/scene/UrdfLoader.hpp"
+#include "corium_sim/AssetResolver.hpp"
 #include "corium_sim/Log.hpp"
 #include <fstream>
 #include <sstream>
@@ -40,9 +41,10 @@ bool UrdfLoader::loadURDF(
     const Vec3& basePosition,
     const Vec3& baseScale
 ) {
-    std::ifstream file(urdfFilePath);
+    std::string resolvedPath = AssetResolver::resolve(urdfFilePath);
+    std::ifstream file(resolvedPath);
     if (!file.is_open()) {
-        CORIUM_LOG_ERROR("UrdfLoader", "Failed to open URDF file: ", urdfFilePath);
+        CORIUM_LOG_ERROR("UrdfLoader", "Failed to open URDF file: ", urdfFilePath, " (resolved to: ", resolvedPath, ")");
         return false;
     }
 

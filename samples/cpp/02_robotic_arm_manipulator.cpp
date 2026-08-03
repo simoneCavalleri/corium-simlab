@@ -42,41 +42,10 @@ int main(int argc, char** argv)
                 true // isStatic
             )
 
-            // 3. Robotic Manipulator Pedestal Base
-            .addModel(
-                "agent_robot",
-                "assets/models/sample_robot.obj",
-                Vec3{0.0f, 0.8f, 0.0f},
-                Vec3{0.8f, 0.8f, 0.8f},
-                Vec3{0.0f, 0.0f, 0.0f},
-                Material::Metallic({0.95f, 0.95f, 0.98f, 1.0f}, 0.15f), // Chrome Base Pedestal
-                true // isStatic
-            )
+            // 3. Load Robotic Arm Manipulator & Joints from URDF Specification
+            .addURDF("assets/urdf/sample_arm.urdf", Vec3{0.0f, 0.4f, 0.0f})
 
-            // 4. Robotic Arm Links
-            .addCube(
-                "shoulder_link",
-                Vec3{0.0f, 1.4f, 0.0f},
-                Vec3{0.4f, 1.0f, 0.4f},
-                Vec3{0.0f, 0.0f, 0.0f},
-                Material::Glossy({0.15f, 0.55f, 0.95f, 1.0f}) // Industrial Blue Upper Arm
-            )
-            .addCube(
-                "elbow_link",
-                Vec3{0.0f, 2.3f, 0.0f},
-                Vec3{0.3f, 0.8f, 0.3f},
-                Vec3{0.0f, 0.0f, 0.0f},
-                Material::Glossy({0.95f, 0.85f, 0.10f, 1.0f}) // Safety Yellow Forearm
-            )
-            .addCube(
-                "wrist_link",
-                Vec3{0.0f, 2.9f, 0.0f},
-                Vec3{0.25f, 0.4f, 0.25f},
-                Vec3{0.0f, 0.0f, 0.0f},
-                Material::Metallic({0.85f, 0.88f, 0.90f, 1.0f}, 0.25f) // Wrist Metallic Housing
-            )
-
-            // 5. Parallel Two-Finger Gripper End-Effector
+            // 4. Parallel Two-Finger Gripper End-Effector
             .addCube(
                 "gripper_finger_l",
                 Vec3{-0.15f, 3.2f, 0.0f},
@@ -92,37 +61,10 @@ int main(int argc, char** argv)
                 Material::Matte({0.2f, 0.2f, 0.25f, 1.0f})
             )
 
-            // 6. Articulated Kinematic Joints
-            .addJoint(
-                "joint_shoulder_yaw",
-                "agent_robot",
-                "shoulder_link",
-                JointType::Revolute,
-                Vec3{0.0f, 0.6f, 0.0f},  // Yaw rotation around vertical Z/Y
-                Vec3{0.0f, 1.0f, 0.0f},
-                -3.14159f, 3.14159f
-            )
-            .addJoint(
-                "joint_elbow_pitch",
-                "shoulder_link",
-                "elbow_link",
-                JointType::Revolute,
-                Vec3{0.0f, 0.9f, 0.0f},  // Pitch rotation around X axis
-                Vec3{1.0f, 0.0f, 0.0f},
-                -2.0944f, 2.0944f
-            )
-            .addJoint(
-                "joint_wrist_roll",
-                "elbow_link",
-                "wrist_link",
-                JointType::Revolute,
-                Vec3{0.0f, 0.6f, 0.0f},  // Wrist roll around Y axis
-                Vec3{0.0f, 1.0f, 0.0f},
-                -3.14159f, 3.14159f
-            )
+            // 5. Additional End-Effector Gripper Joints
             .addJoint(
                 "joint_gripper_l",
-                "wrist_link",
+                "elbow_link",
                 "gripper_finger_l",
                 JointType::Prismatic,
                 Vec3{-0.15f, 0.3f, 0.0f}, // Linear slide inwards/outwards
@@ -131,7 +73,7 @@ int main(int argc, char** argv)
             )
             .addJoint(
                 "joint_gripper_r",
-                "wrist_link",
+                "elbow_link",
                 "gripper_finger_r",
                 JointType::Prismatic,
                 Vec3{0.15f, 0.3f, 0.0f},
