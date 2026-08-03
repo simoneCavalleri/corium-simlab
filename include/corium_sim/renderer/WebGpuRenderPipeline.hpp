@@ -51,7 +51,7 @@ public:
         const Material& material = {}
     ) noexcept;
 
-    void endFrame(WGPUQueue queue) noexcept;
+    void endFrame(WGPUQueue queue, WGPUSurface surface = nullptr) noexcept;
 
     [[nodiscard]] bool inFrame() const noexcept { return _inFrame; }
     [[nodiscard]] const Texture& defaultCheckerTexture() const noexcept { return _defaultCheckerTex; }
@@ -89,7 +89,7 @@ private:
     Texture _defaultCheckerTex{};
     Texture _defaultGridTex{};
     UniformBufferObject _currentUbo{};
-
+    WGPUDevice _device = nullptr;
     bool _initialized = false;
     bool _inFrame = false;
 };

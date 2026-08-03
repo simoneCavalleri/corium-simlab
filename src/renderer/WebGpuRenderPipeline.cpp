@@ -54,6 +54,7 @@ bool WebGpuRenderPipeline::initialize(WGPUDevice device, WGPUQueue queue, WGPUTe
     if (!device || !queue) return false;
     shutdown();
 
+    _device = device;
     createPipelineLayout(device);
     createRenderPipeline(device, surfaceFormat);
 
@@ -107,7 +108,7 @@ bool WebGpuRenderPipeline::beginFrame(
     WGPUSurfaceTexture surfaceTexture{};
     wgpuSurfaceGetCurrentTexture(surface, &surfaceTexture);
     if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_Success || !surfaceTexture.texture) {
-        CORIUM_LOG_ERROR("WebGpuRenderPipeline", "Failed to acquire swapchain surface texture.");
+        safeRelease<WGPUCommandEncoder, wgpuCommandEncoderRelease>(_currentEncoder);
         _inFrame = false;
         return false;
     }
@@ -165,18 +166,18 @@ void WebGpuRenderPipeline::drawMesh(
     _currentUbo.albedoColor = material.albedo;
     _currentUbo.materialParams = math::Vec4{material.metallic, material.roughness, material.emissive, 0.0f};
 
-    WGPUBuffer ubo = getOrCreateUboBuffer(nullptr, _currentUboIndex);
+    WGPUBuffer ubo = getOrCreateUboBuffer(_device, _currentUboIndex);
     wgpuQueueWriteBuffer(queue, ubo, 0, &_currentUbo, sizeof(UniformBufferObject));
 
     const auto& tex = texture.isValid() ? texture : _defaultCheckerTex;
-    WGPUBindGroup bindGroup = getOrCreateBindGroup(nullptr, _currentUboIndex, tex, ubo);
+    WGPUBindGroup bindGroup = getOrCreateBindGroup(_device, _currentUboIndex, tex, ubo);
     _currentUboIndex++;
 
     wgpuRenderPassEncoderSetBindGroup(_currentPass, 0, bindGroup, 0, nullptr);
     mesh.render(_currentPass);
 }
 
-void WebGpuRenderPipeline::endFrame(WGPUQueue queue) noexcept
+void WebGpuRenderPipeline::endFrame(WGPUQueue queue, WGPUSurface surface) noexcept
 {
     if (!_inFrame || !_currentPass || !_currentEncoder) return;
 
@@ -186,6 +187,12 @@ void WebGpuRenderPipeline::endFrame(WGPUQueue queue) noexcept
     WGPUCommandBufferDescriptor cmdBufferDesc{};
     WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(_currentEncoder, &cmdBufferDesc);
     wgpuQueueSubmit(queue, 1, &cmdBuffer);
+
+#if !defined(__EMSCRIPTEN__)
+    if (surface) {
+        wgpuSurfacePresent(surface);
+    }
+#endif
 
     safeRelease<WGPUCommandBuffer, wgpuCommandBufferRelease>(cmdBuffer);
     safeRelease<WGPUCommandEncoder, wgpuCommandEncoderRelease>(_currentEncoder);

@@ -156,6 +156,15 @@ void WebGpuContext::resize(uint32_t width, uint32_t height) noexcept
     }
 }
 
+void WebGpuContext::present() noexcept
+{
+#if !defined(__EMSCRIPTEN__)
+    if (_surface) {
+        wgpuSurfacePresent(_surface);
+    }
+#endif
+}
+
 void WebGpuContext::shutdown() noexcept
 {
     if (!_initialized) return;

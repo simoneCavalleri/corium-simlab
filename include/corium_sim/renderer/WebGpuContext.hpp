@@ -28,6 +28,7 @@ public:
 
     bool initialize(GLFWwindow* windowHandle, uint32_t width, uint32_t height) noexcept;
     void resize(uint32_t width, uint32_t height) noexcept;
+    void present() noexcept;
     void shutdown() noexcept;
 
     [[nodiscard]] bool isInitialized() const noexcept { return _initialized; }

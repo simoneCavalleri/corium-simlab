@@ -106,7 +106,7 @@ void WebGpuBackend::drawMesh(
 
 void WebGpuBackend::endFrame() noexcept
 {
-    _renderPipeline.endFrame(_context.queue());
+    _renderPipeline.endFrame(_context.queue(), _context.surface());
 }
 
 void WebGpuBackend::shutdown() noexcept

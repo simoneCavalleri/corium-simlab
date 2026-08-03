@@ -314,7 +314,7 @@ bool WebGpuComputePipeline::computeLidarRaycast(
 
     wgpuBufferMapAsync(_stagingBuf, WGPUMapMode_Read, 0, distBufferSize, mapCallback, &mapCtx);
     while (!mapCtx.done) {
-        wgpuDevicePoll(device, true, nullptr);
+        wgpuDevicePoll(device, false, nullptr);
     }
 
     const float* mapped = static_cast<const float*>(wgpuBufferGetConstMappedRange(_stagingBuf, 0, distBufferSize));
