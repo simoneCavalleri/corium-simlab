@@ -19,8 +19,21 @@ void JointKinematics::updateKinematics(scene::SimScene& scene, float deltaTime) 
         // Enforce joint limits
         joint.position = std::clamp(joint.position, joint.minLimit, joint.maxLimit);
 
-        scene::SimEntity* parent = scene.findEntity(joint.parentName);
-        scene::SimEntity* child = scene.findEntity(joint.childName);
+        // Resolve cached entity vector indices for ultra-fast O(1) access
+        auto& ents = scene.entities();
+        if (joint.childEntityIndex == static_cast<std::size_t>(-1) && !joint.childName.empty()) {
+            if (scene::SimEntity* c = scene.findEntity(joint.childName)) {
+                joint.childEntityIndex = static_cast<std::size_t>(c - ents.data());
+            }
+        }
+        if (joint.parentEntityIndex == static_cast<std::size_t>(-1) && !joint.parentName.empty()) {
+            if (scene::SimEntity* p = scene.findEntity(joint.parentName)) {
+                joint.parentEntityIndex = static_cast<std::size_t>(p - ents.data());
+            }
+        }
+
+        scene::SimEntity* child = (joint.childEntityIndex < ents.size()) ? &ents[joint.childEntityIndex] : nullptr;
+        scene::SimEntity* parent = (joint.parentEntityIndex < ents.size()) ? &ents[joint.parentEntityIndex] : nullptr;
 
         if (!child) continue;
         child->hasPhysics = false;

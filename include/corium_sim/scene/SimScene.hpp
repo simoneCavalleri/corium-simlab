@@ -40,6 +40,9 @@ public:
     /// @brief Add articulated joint to scene.
     void addJoint(kinematics::SimJoint joint);
 
+    /// @brief Rebuild entity and joint name-to-index lookup maps.
+    void rebuildIndices() noexcept;
+
     /// @brief Destroy and release GPU resources of all entities in scene.
     void destroy() noexcept;
 

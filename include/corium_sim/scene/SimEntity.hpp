@@ -26,6 +26,7 @@ struct SimEntity {
     math::Vec3 position{0.0f, 0.0f, 0.0f};
     math::Vec3 rotation{0.0f, 0.0f, 0.0f}; // Euler angles in degrees (X, Y, Z)
     math::Vec3 scale{1.0f, 1.0f, 1.0f};
+    math::Vec3 visualOffset{0.0f, 0.0f, 0.0f}; // Offset from joint/pivot origin to mesh center
 
     // 3D Physics Properties
     math::Vec3 velocity{0.0f, 0.0f, 0.0f};
@@ -43,9 +44,11 @@ struct SimEntity {
         math::Mat4 Rx = math::Mat4::rotateX(rotation.x * math::DEG2RAD);
         math::Mat4 Ry = math::Mat4::rotateY(rotation.y * math::DEG2RAD);
         math::Mat4 Rz = math::Mat4::rotateZ(rotation.z * math::DEG2RAD);
+        math::Mat4 R = Ry * Rx * Rz;
+        math::Mat4 T_off = math::Mat4::translate(visualOffset);
         math::Mat4 S = math::Mat4::scale(scale);
 
-        return T * Ry * Rx * Rz * S;
+        return T * R * T_off * S;
     }
 
     /// @brief Compute World-Space Axis-Aligned Bounding Box (AABB).

@@ -28,6 +28,10 @@ struct SimJoint {
     float minLimit = -3.14159f;  // Minimum joint limit
     float maxLimit =  3.14159f;  // Maximum joint limit
     float targetVelocity = 0.0f; // Actuator velocity target
+
+    // Fast O(1) Direct Vector Index Caches (resolved on first frame)
+    mutable std::size_t parentEntityIndex = static_cast<std::size_t>(-1);
+    mutable std::size_t childEntityIndex = static_cast<std::size_t>(-1);
 };
 
 } // namespace corium_sim::kinematics

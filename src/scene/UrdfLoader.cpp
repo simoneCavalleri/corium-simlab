@@ -181,6 +181,15 @@ bool UrdfLoader::loadURDF(
         jointPos = jointEnd + 8;
     }
 
+    // Compute visual offsets for child links relative to joint anchors
+    for (const auto& joint : scene.joints()) {
+        SimEntity* parentEntity = scene.findEntity(joint.parentName);
+        SimEntity* childEntity = scene.findEntity(joint.childName);
+        if (parentEntity && childEntity) {
+            childEntity->visualOffset = childEntity->position - (parentEntity->position + joint.anchor);
+        }
+    }
+
     CORIUM_LOG_INFO("UrdfLoader", "Successfully loaded URDF robot specification: ", urdfFilePath);
     return true;
 }

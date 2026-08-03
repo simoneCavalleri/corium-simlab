@@ -30,9 +30,9 @@ public:
         std::array<float, 3> action{};
 
         // Smooth sinusoidal trajectory for 3-DOF pick-and-place operation
-        action[0] = std::sin(_simTime * 1.2f) * 0.9f; // Joint Base Yaw rotation
-        action[1] = std::cos(_simTime * 1.8f) * 0.4f; // Joint Shoulder Pitch
-        action[2] = std::sin(_simTime * 2.2f) * 0.5f; // Joint Elbow Pitch
+        action[0] = std::sin(_simTime * 2.5f) * 1.2f; // Joint Base Yaw rotation
+        action[1] = std::sin(_simTime * 3.5f) * 0.8f; // Joint Shoulder Pitch
+        action[2] = std::cos(_simTime * 4.5f) * 0.9f; // Joint Elbow Pitch
 
         (void)jointObs;
         return action;
@@ -172,7 +172,9 @@ int main(int argc, char** argv)
         }
     });
 
-    std::cout << "  - 3D Industrial Workstation & URDF Robot Arm Initialized Successfully!\n\n";
+    // Focus camera directly on the robotic workstation scene
+    app.camera().setTarget(Vec3{1.0f, 1.8f, -0.5f});
+    app.camera().setDistance(7.0f);
 
     // -------------------------------------------------------------------------
     // 3. RUN 3D INTERACTIVE WEBGPU RENDERING & SIMULATION LOOP
