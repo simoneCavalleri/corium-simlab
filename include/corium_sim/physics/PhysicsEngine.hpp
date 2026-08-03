@@ -25,6 +25,10 @@ public:
     /// @brief Advance physics simulation step for all active scene entities.
     void step(scene::SimScene& scene, float deltaTime) noexcept;
 
+    /// @brief Reset physics engine internal state.
+    void reset() noexcept {}
+
+
     /// @brief Check AABB overlap collision between two bounding boxes.
     [[nodiscard]] static bool checkAABBCollision(
         const renderer::BoundingBox& a,
