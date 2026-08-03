@@ -90,11 +90,21 @@ int main(int argc, char** argv)
 
     auto incubatorPtr = std::make_shared<decltype(incubator)>(std::move(incubator));
 
-    app.onStep([incubatorPtr](SimLabApp&, float dt) {
-        incubatorPtr->step(dt);
+    app.onStep([incubatorPtr](SimLabApp& appInstance, float dt) {
+        incubatorPtr->step(appInstance.scene(), dt);
+
+        if (auto* follower1 = appInstance.scene().findEntity("amr_follower_1")) {
+            follower1->velocity.z = 0.6f;
+            follower1->rotation.y += 10.0f * dt;
+        }
+        if (auto* follower2 = appInstance.scene().findEntity("amr_follower_2")) {
+            follower2->velocity.z = 0.8f;
+            follower2->rotation.y -= 15.0f * dt;
+        }
     });
 
     app.setScene(std::move(incubatorPtr->env().scene()));
+
     std::cout << "  - 3D Multi-Agent Swarm Environment initialized successfully!\n\n";
 
     // -------------------------------------------------------------------------
