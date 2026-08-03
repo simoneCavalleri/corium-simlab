@@ -133,6 +133,13 @@ public:
         );
     }
 
+    /// @brief Attach physical motor drives / actuators suite directly (bypassing perception chain).
+    template <concepts::Actuator... Actuators>
+    auto withActuators(Actuators... actuators)
+    {
+        return withoutPerceptionChain().withActuators(std::move(actuators)...);
+    }
+
 private:
     ModelType _model;
     SensorSuiteType _sensorSuite;

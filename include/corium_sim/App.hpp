@@ -53,6 +53,35 @@ public:
     /// @brief Register custom simulation step callback (e.g. Incubator step / Policy step loop).
     void onStep(StepCallback callback) { _stepCallback = std::move(callback); }
 
+    /// @brief Attach a 3D Simulation Arena instance (shared_ptr): links 3D scene, binds WebGPU rendering backend for GPU sensors, and registers step loop.
+    template <typename ArenaType>
+    void attachArena(std::shared_ptr<ArenaType> arena)
+    {
+        if (!arena) return;
+        arena->setRenderBackend(&_gpuBackend);
+        setScene(arena->scenePtr());
+        onStep([arena](SimLabApp&, float dt) {
+            (void)arena->step(dt);
+        });
+    }
+
+    /// @brief Attach a 3D Simulation Arena instance (by value / rvalue): automatically wraps in std::shared_ptr.
+    template <typename ArenaType>
+        requires (!requires(ArenaType obj) { obj.get(); })
+    void attachArena(ArenaType&& arena)
+    {
+        using DecayedType = std::decay_t<ArenaType>;
+        auto sharedArena = std::make_shared<DecayedType>(std::forward<ArenaType>(arena));
+        attachArena(sharedArena);
+    }
+
+    /// @brief Explicit alias for attachArena().
+    template <typename ArenaType>
+    void attachSimArena(ArenaType&& arena)
+    {
+        attachArena(std::forward<ArenaType>(arena));
+    }
+
     [[nodiscard]] renderer::WebGpuBackend& renderer() noexcept { return _gpuBackend; }
     [[nodiscard]] const renderer::WebGpuBackend& renderer() const noexcept { return _gpuBackend; }
     [[nodiscard]] renderer::Camera& camera() noexcept { return _camera; }

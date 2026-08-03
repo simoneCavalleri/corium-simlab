@@ -9,7 +9,7 @@
 #include "corium_sim/agent/AgentSpec.hpp"
 #include "corium_sim/agent/Concepts.hpp"
 #include "corium_sim/agent/CustomSensor.hpp"
-#include "corium_sim/agent/IncubatorBuilder.hpp"
+#include "corium_sim/agent/SimArena.hpp"
 #include "corium_sim/agent/PerceptionPipeline.hpp"
 #include "corium_sim/agent/PhysicalAgent.hpp"
 #include "corium_sim/agent/Policy.hpp"
