@@ -7,7 +7,7 @@ namespace corium_sim {
 using namespace math;
 
 SimLabApp::SimLabApp()
-    : BaseApp({ .title = "Corium SimLab — Physical Agent Incubator & Simulation Engine", .width = 1280, .height = 720, .noApi = true }),
+    : BaseApp({ .title = "Corium SimLab — 3D Physical Simulation Engine", .width = 1280, .height = 720, .noApi = true }),
       _scene(std::make_shared<scene::SimScene>())
 {}
 
