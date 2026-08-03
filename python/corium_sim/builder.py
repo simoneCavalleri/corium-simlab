@@ -39,6 +39,11 @@ class CoriumEnvBuilder:
         self._scene_fn = scene_builder_fn
         return self
 
+    def with_scene(self, scene_builder_fn: Callable[[corium_sim_py.SceneBuilder], Any]) -> "CoriumEnvBuilder":
+        """Alias for with_environment."""
+        return self.with_environment(scene_builder_fn)
+
+
     def spawn_agent(self, agent_spec: AgentSpec) -> "CoriumEnvBuilder":
         """Spawn an agent instance defined by an AgentSpec blueprint into the environment."""
         self._agents.append(agent_spec)
