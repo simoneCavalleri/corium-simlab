@@ -91,6 +91,15 @@ public:
     /// @brief Shutdown WebGPU resources cleanly.
     void shutdown() noexcept;
 
+    /// @brief Execute WebGPU WGSL Compute Shader parallel 3D Raycasting against scene AABBs.
+    bool computeLidarRaycast(
+        const std::vector<math::Vec3>& rayOrigins,
+        const std::vector<math::Vec3>& rayDirections,
+        const scene::SimScene& scene,
+        float maxDistance,
+        std::vector<float>& outDistances
+    ) noexcept;
+
     [[nodiscard]] bool isInitialized() const noexcept { return _initialized; }
     [[nodiscard]] uint64_t frameCount() const noexcept { return _frameCount; }
     [[nodiscard]] uint32_t width() const noexcept { return _width; }
@@ -114,6 +123,7 @@ private:
     void createDepthBuffer();
     void createPipelineLayout();
     void createRenderPipeline();
+    void createComputePipeline();
     void clearRenderPools() noexcept;
     void moveFrom(WebGpuBackend&& rhs) noexcept;
 
@@ -133,6 +143,9 @@ private:
     WGPUBindGroupLayout _bindGroupLayout = nullptr;
     WGPUPipelineLayout _pipelineLayout = nullptr;
     WGPURenderPipeline _pipeline = nullptr;
+
+    WGPUBindGroupLayout _computeBindGroupLayout = nullptr;
+    WGPUComputePipeline _computePipeline = nullptr;
     WGPUBuffer _uniformBuffer = nullptr;
     std::vector<WGPUBuffer> _uboPool{};
     std::vector<BindGroupCacheEntry> _bindGroupPool{};
