@@ -66,6 +66,26 @@ corium-simlab/
 
 ## Quickstart & Build Instructions
 
+### System Prerequisites (Linux)
+
+Before building, ensure the required C++20 compiler toolchain, CMake, Python 3 development headers (for Python bindings), and GLFW windowing system packages (Wayland / X11 / `xkbcommon`) are installed:
+
+- **Ubuntu / Debian**:
+  ```bash
+  sudo apt update
+  sudo apt install cmake build-essential pkg-config python3-dev libxkbcommon-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libwayland-dev wayland-protocols
+  ```
+
+- **Fedora / RHEL**:
+  ```bash
+  sudo dnf install cmake gcc-c++ pkgconf-pkg-config python3-devel libxkbcommon-devel libX11-devel libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel wayland-devel wayland-protocols-devel
+  ```
+
+- **Arch Linux**:
+  ```bash
+  sudo pacman -S cmake base-devel pkgconf python libxkbcommon libx11 libxrandr libxinerama libxcursor libxi wayland wayland-protocols
+  ```
+
 ### C++ Samples & Library Build
 
 ```bash
