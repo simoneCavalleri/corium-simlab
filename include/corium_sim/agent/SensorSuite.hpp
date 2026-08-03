@@ -11,6 +11,8 @@
 #include "corium_sim/scene/SimEntity.hpp"
 #include "corium_sim/scene/SimScene.hpp"
 
+namespace corium_sim::renderer { class WebGpuBackend; }
+
 namespace corium_sim::agent {
 
 /// @brief Compile-time variadic container for sensor suites with zero dynamic memory allocation.
@@ -29,8 +31,13 @@ public:
     /// @brief Sample all sensors in sequence into a contiguous zero-copy float array.
     /// @param entity Target physical entity.
     /// @param scene Target 3D environment scene.
+    /// @param gpuBackend Optional pointer to WebGPU rendering engine backend for GPU-accelerated sensors.
     /// @return Fixed-size array containing aggregated sensor observations.
-    [[nodiscard]] inline ObservationBuffer observe(const scene::SimEntity& entity, const scene::SimScene& scene) noexcept
+    [[nodiscard]] inline ObservationBuffer observe(
+        const scene::SimEntity& entity,
+        const scene::SimScene& scene,
+        renderer::WebGpuBackend* gpuBackend = nullptr
+    ) noexcept
     {
         ObservationBuffer buffer{};
         if constexpr (total_observation_size == 0) {
@@ -40,9 +47,15 @@ public:
         std::size_t offset = 0;
         std::apply([&](auto&... sensor) {
             (([&]() {
-                auto obsSpan = sensor.sample(entity, scene);
+                using SensorType = std::decay_t<decltype(sensor)>;
+                std::span<const float> obsSpan;
+                if constexpr (requires { sensor.sample(entity, scene, gpuBackend); }) {
+                    obsSpan = sensor.sample(entity, scene, gpuBackend);
+                } else {
+                    obsSpan = sensor.sample(entity, scene);
+                }
                 std::copy(obsSpan.begin(), obsSpan.end(), buffer.begin() + offset);
-                offset += std::decay_t<decltype(sensor)>::observation_size;
+                offset += SensorType::observation_size;
             }()), ...);
         }, _sensors);
 

@@ -41,9 +41,13 @@ public:
     [[nodiscard]] inline const SensorSuiteType& sensorSuite() const noexcept { return _sensorSuite; }
 
     /// @brief Sample raw sensors in environment scene and run user-defined perception processing / sensor fusion.
-    [[nodiscard]] inline ProcessedObservationBuffer observe(const scene::SimEntity& entity, const scene::SimScene& scene) noexcept
+    [[nodiscard]] inline ProcessedObservationBuffer observe(
+        const scene::SimEntity& entity,
+        const scene::SimScene& scene,
+        renderer::WebGpuBackend* gpuBackend = nullptr
+    ) noexcept
     {
-        RawObservationBuffer rawObs = _sensorSuite.observe(entity, scene);
+        RawObservationBuffer rawObs = _sensorSuite.observe(entity, scene, gpuBackend);
         return _processor(rawObs);
     }
 

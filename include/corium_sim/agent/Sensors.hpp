@@ -5,12 +5,21 @@
 #include <cstddef>
 #include <span>
 #include "corium_sim/agent/Concepts.hpp"
+#include "corium_sim/agent/GpuSensors.hpp"
 #include "corium_sim/math/Math.hpp"
 #include "corium_sim/physics/Raycast.hpp"
 #include "corium_sim/scene/SimEntity.hpp"
 #include "corium_sim/scene/SimScene.hpp"
 
 namespace corium_sim::agent::sensors {
+
+/// @brief Unified 3D LiDAR Sensor (GPU Depth-pass with automatic CPU raycast fallback).
+template <std::size_t RayCount = 180>
+using LidarSensor = GpuRaycastLidarSensor<RayCount>;
+
+/// @brief Unified Onboard Visual Camera Sensor (WebGPU Offscreen RGB & Depth).
+template <uint32_t Width = 128, uint32_t Height = 128>
+using CameraSensor = GpuCameraSensor<Width, Height>;
 
 /// @brief 3D Position & Linear Velocity Sensor (6 floats: pos_x, pos_y, pos_z, vel_x, vel_y, vel_z).
 class PositionEncoderSensor {

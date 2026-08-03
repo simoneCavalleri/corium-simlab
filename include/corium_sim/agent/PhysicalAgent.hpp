@@ -53,9 +53,12 @@ public:
     [[nodiscard]] inline const ActuatorSuiteType& actuators() const noexcept { return _actuators; }
 
     /// @brief Sample all sensors against surrounding 3D environment scene into zero-copy observation buffer.
-    [[nodiscard]] inline ObservationBuffer observe(const scene::SimScene& scene) noexcept
+    [[nodiscard]] inline ObservationBuffer observe(
+        const scene::SimScene& scene,
+        renderer::WebGpuBackend* gpuBackend = nullptr
+    ) noexcept
     {
-        return _sensors.observe(_body, scene);
+        return _sensors.observe(_body, scene, gpuBackend);
     }
 
     /// @brief Apply aggregated action vector to agent actuators.
