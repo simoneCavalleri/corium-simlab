@@ -7,7 +7,7 @@ namespace corium_sim {
 using namespace math;
 
 SimLabApp::SimLabApp()
-    : BaseApp({ .title = "Corium SimLab — Real-Time Agent Simulation Environment", .width = 1280, .height = 720, .noApi = true })
+    : BaseApp({ .title = "Corium SimLab — Physical Agent Incubator & Simulation Engine", .width = 1280, .height = 720, .noApi = true })
 {}
 
 SimLabApp::~SimLabApp() = default;
@@ -87,9 +87,16 @@ void SimLabApp::onRegisterHandlers()
             return;
         }
 
-        scene::SimEntity* agent = _scene.findEntity("robot_agent");
+        scene::SimEntity* agent = scene().findEntity("robot_agent");
+        if (!agent) agent = scene().findEntity("agent_robot");
+        if (!agent) agent = scene().findEntity("agent");
         if (!agent) {
-            agent = _scene.findEntity("agent_robot");
+            for (auto& entity : scene().entities()) {
+                if (!entity.isStatic) {
+                    agent = &entity;
+                    break;
+                }
+            }
         }
 
         if (agent) {
@@ -122,7 +129,7 @@ void SimLabApp::onRegisterHandlers()
 
     // Handler for Agent Joint Commands
     on([this](const AgentJointCommand& cmd) {
-        if (auto* joint = _scene.findJoint(cmd.jointName)) {
+        if (auto* joint = scene().findJoint(cmd.jointName)) {
             joint->position = cmd.targetPosition;
             joint->targetVelocity = cmd.targetVelocity;
         }
@@ -146,10 +153,10 @@ void SimLabApp::onInitialize()
 
 void SimLabApp::setScene(scene::SimScene scene) noexcept
 {
-    _scene = std::move(scene);
-    _jointKinematics.updateKinematics(_scene, 0.0f);
-    if (_gpuBackend.isInitialized() && _scene.entityCount() > 0) {
-        renderer::BoundingBox bounds = _scene.sceneBounds();
+    _environment = environment::SimEnvironment(std::move(scene));
+    _jointKinematics.updateKinematics(this->scene(), 0.0f);
+    if (_gpuBackend.isInitialized() && this->scene().entityCount() > 0) {
+        renderer::BoundingBox bounds = this->scene().sceneBounds();
         _camera.focusOnBounds(bounds.min, bounds.max);
     }
 }
@@ -158,9 +165,19 @@ void SimLabApp::resetEnvironment() noexcept
 {
     _simStepCount = 0;
     _episodeCount++;
+    _environment.reset();
 
-    scene::SimEntity* agent = _scene.findEntity("robot_agent");
-    if (!agent) agent = _scene.findEntity("agent_robot");
+    scene::SimEntity* agent = scene().findEntity("robot_agent");
+    if (!agent) agent = scene().findEntity("agent_robot");
+    if (!agent) agent = scene().findEntity("agent");
+    if (!agent) {
+        for (auto& entity : scene().entities()) {
+            if (!entity.isStatic) {
+                agent = &entity;
+                break;
+            }
+        }
+    }
 
     if (agent) {
         agent->position = Vec3{0.0f, 0.0f, 0.0f};
@@ -179,9 +196,9 @@ bool SimLabApp::loadSceneMesh(const std::string& filePath)
 
     if (!device || !queue) return false;
 
-    _scene.addEntity(
+    scene().addEntity(
         scene::SimEntity{
-            .id = static_cast<uint32_t>(_scene.entityCount() + 1),
+            .id = static_cast<uint32_t>(scene().entityCount() + 1),
             .name = filePath,
             .mesh = renderer::Mesh::createFromOBJ(device, queue, filePath),
             .texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32),
@@ -189,7 +206,7 @@ bool SimLabApp::loadSceneMesh(const std::string& filePath)
         }
     );
 
-    renderer::BoundingBox bounds = _scene.sceneBounds();
+    renderer::BoundingBox bounds = scene().sceneBounds();
     _camera.focusOnBounds(bounds.min, bounds.max);
     CORIUM_LOG_INFO("SimLab", "3D Mesh asset successfully added to simulation scene!");
     return true;
@@ -200,22 +217,30 @@ void SimLabApp::onRender(double deltaTime)
     float dt = static_cast<float>(deltaTime);
     _renderFramesCount++;
 
-
-    // 1. Advance Physics Engine & Joint Kinematics Simulation Step
-    _physicsEngine.step(_scene, dt);
-    _jointKinematics.updateKinematics(_scene, dt);
+    // 1. Advance Physical Environment & Joint Kinematics Step
+    _environment.step(dt);
+    _jointKinematics.updateKinematics(scene(), dt);
     _simStepCount++;
 
     // 2. Evaluate Agent State & Dense Rewards
-    scene::SimEntity* agent = _scene.findEntity("agent_robot");
-    if (!agent) agent = _scene.findEntity("robot_agent");
+    scene::SimEntity* agent = scene().findEntity("agent_robot");
+    if (!agent) agent = scene().findEntity("robot_agent");
+    if (!agent) agent = scene().findEntity("agent");
+    if (!agent) {
+        for (auto& entity : scene().entities()) {
+            if (!entity.isStatic) {
+                agent = &entity;
+                break;
+            }
+        }
+    }
 
-    scene::SimEntity* target = _scene.findEntity("target_goal");
-    if (!target) target = _scene.findEntity("target_box");
+    scene::SimEntity* target = scene().findEntity("target_goal");
+    if (!target) target = scene().findEntity("target_box");
 
-    if (agent && target) {
+    if (agent) {
         Vec3 agentPos = agent->position;
-        Vec3 targetPos = target->position;
+        Vec3 targetPos = target ? target->position : Vec3{4.0f, 0.75f, -2.0f};
         float dist = (agentPos - targetPos).length();
 
         bool isReached = (dist < _config.reachThreshold);
@@ -245,7 +270,7 @@ void SimLabApp::onRender(double deltaTime)
         });
 
         // Render onboard agent visual sensor 3D view to offscreen target
-        _gpuBackend.renderOffscreen(_sensorTarget, _sensorCamera.camera(), _scene);
+        _gpuBackend.renderOffscreen(_sensorTarget, _sensorCamera.camera(), scene());
 
         // Extract visual sensor frame from WebGPU staging buffer
         std::vector<uint8_t> sensorPixels = _gpuBackend.readOffscreenPixels(_sensorTarget);
@@ -258,14 +283,6 @@ void SimLabApp::onRender(double deltaTime)
             .stepIndex = _simStepCount,
             .rgbData = std::move(sensorPixels)
         });
-
-        if (_simStepCount % 100 == 0) {
-            std::cout << "[SimLab Agent #1] Step " << _simStepCount
-                      << " | Pos: (" << agentPos.x << ", " << agentPos.z << ")"
-                      << " | Dist to Target: " << dist
-                      << " | Reward: " << reward
-                      << " | Sensor Frame: 128x128 (" << _sensorCamera.width() * _sensorCamera.height() * 4 << " bytes)\n";
-        }
 
         if (isReached || isTruncated) {
             std::cout << "[SimLab Agent #1] Episode completed ("
@@ -283,7 +300,7 @@ void SimLabApp::onRender(double deltaTime)
     }
 
     // 4. Render all active 3D entities in simulation scene
-    for (const auto& entity : _scene.entities()) {
+    for (const auto& entity : scene().entities()) {
         if (entity.mesh.isValid()) {
             _gpuBackend.drawMesh(entity.mesh, entity.texture, entity.transformMatrix(), entity.material);
         }
@@ -295,7 +312,7 @@ void SimLabApp::onRender(double deltaTime)
 void SimLabApp::onShutdown()
 {
     _gpuBackend.destroyOffscreenTarget(_sensorTarget);
-    _scene.destroy();
+    scene().destroy();
     _gpuBackend.shutdown();
 
     CORIUM_LOG_INFO("SimLab", "Application Shutdown Summary:");

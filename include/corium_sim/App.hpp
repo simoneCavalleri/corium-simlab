@@ -10,6 +10,7 @@
 #include "corium_sim/renderer/WebGpuBackend.hpp"
 #include "corium_sim/scene/SimScene.hpp"
 #include "corium_sim/scene/SceneBuilder.hpp"
+#include "corium_sim/environment/SimEnvironment.hpp"
 
 #include <corium/corium.hpp>
 #include <corium/ui/WindowApp.hpp>
@@ -53,10 +54,13 @@ public:
     [[nodiscard]] const renderer::WebGpuBackend& renderer() const noexcept { return _gpuBackend; }
     [[nodiscard]] renderer::Camera& camera() noexcept { return _camera; }
     [[nodiscard]] renderer::SensorCamera& sensorCamera() noexcept { return _sensorCamera; }
-    [[nodiscard]] scene::SimScene& scene() noexcept { return _scene; }
-    [[nodiscard]] const scene::SimScene& scene() const noexcept { return _scene; }
-    [[nodiscard]] physics::PhysicsEngine& physics() noexcept { return _physicsEngine; }
+    [[nodiscard]] environment::DefaultSimEnvironment& environment() noexcept { return _environment; }
+    [[nodiscard]] const environment::DefaultSimEnvironment& environment() const noexcept { return _environment; }
+    [[nodiscard]] scene::SimScene& scene() noexcept { return _environment.scene(); }
+    [[nodiscard]] const scene::SimScene& scene() const noexcept { return _environment.scene(); }
+    [[nodiscard]] physics::PhysicsEngine& physics() noexcept { return _environment.physics(); }
     [[nodiscard]] kinematics::JointKinematics& jointKinematics() noexcept { return _jointKinematics; }
+
 
     /// @brief Set simulation configuration parameters.
     void setConfig(const SimConfig& config) noexcept { _config = config; }
@@ -69,10 +73,11 @@ private:
     renderer::SensorCamera _sensorCamera{128, 128, 75.0f};
     renderer::OffscreenTarget _sensorTarget{};
 
-    scene::SimScene _scene{};
-    physics::PhysicsEngine _physicsEngine{};
+    environment::DefaultSimEnvironment _environment{};
+
     kinematics::JointKinematics _jointKinematics{};
     SimConfig _config{};
+
 
     uint32_t _renderFramesCount = 0;
     uint64_t _simStepCount = 0;

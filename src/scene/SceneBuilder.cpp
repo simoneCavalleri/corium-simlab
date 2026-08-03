@@ -136,6 +136,13 @@ SceneBuilder& SceneBuilder::addModel(
     if (data.success && _device && _queue) {
         entity.mesh.upload(_device, _queue, data.vertices, data.indices);
         entity.texture = renderer::Texture::createCheckerboard(_device, _queue, 256, 256, 32);
+        entity.localBounds = data.bounds;
+    } else {
+        if (_device && _queue) {
+            entity.mesh = renderer::Mesh::createCube(_device, _queue, 1.0f);
+            entity.texture = renderer::Texture::createCheckerboard(_device, _queue, 256, 256, 32);
+        }
+        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
     }
     entity.material = material;
     entity.position = position;
@@ -143,9 +150,9 @@ SceneBuilder& SceneBuilder::addModel(
     entity.rotation = rotation;
     entity.isStatic = isStatic;
     entity.hasPhysics = hasPhysics;
-    entity.localBounds = data.bounds;
 
     _scene.addEntity(std::move(entity));
+
     return *this;
 }
 

@@ -22,6 +22,13 @@ public:
     SceneBuilder(WGPUDevice device, WGPUQueue queue);
     ~SceneBuilder() = default;
 
+    SceneBuilder(const SceneBuilder&) = delete;
+    SceneBuilder& operator=(const SceneBuilder&) = delete;
+
+    SceneBuilder(SceneBuilder&&) noexcept = default;
+    SceneBuilder& operator=(SceneBuilder&&) noexcept = default;
+
+
     /// @brief Add a ground reference grid plane entity to the scene.
     SceneBuilder& addGroundGrid(float width = 50.0f, float depth = 50.0f, uint32_t subdivisions = 50);
 
