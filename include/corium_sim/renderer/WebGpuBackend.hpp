@@ -1,22 +1,15 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 #include "corium_sim/math/Math.hpp"
 #include "corium_sim/renderer/Camera.hpp"
 #include "corium_sim/renderer/Material.hpp"
 #include "corium_sim/renderer/Mesh.hpp"
 #include "corium_sim/renderer/Texture.hpp"
-#include "corium_sim/renderer/Uniforms.hpp"
-
-#include <vector>
-
-#if __has_include(<webgpu/webgpu.h>)
-#include <webgpu/webgpu.h>
-#elif __has_include(<webgpu.h>)
-#include <webgpu.h>
-#elif __has_include("webgpu.h")
-#include "webgpu.h"
-#endif
+#include "corium_sim/renderer/WebGpuContext.hpp"
+#include "corium_sim/renderer/WebGpuRenderPipeline.hpp"
+#include "corium_sim/renderer/WebGpuComputePipeline.hpp"
 
 namespace corium_sim::scene { class SimScene; }
 struct GLFWwindow;
@@ -37,11 +30,10 @@ struct OffscreenTarget {
     bool isValid = false;
 };
 
-/// @brief WebGPU 3D Rendering Engine Backend.
-/// Manages WebGPU Swapchain, Depth Buffer, WGSL Shaders, Pipeline Layout, BindGroups, and Render Pass.
+/// @brief High-level WebGPU Renderer Facade coordinating Context, 3D Render Pipeline, and Compute Shader Pipeline.
 class WebGpuBackend {
 public:
-    WebGpuBackend();
+    WebGpuBackend() = default;
     ~WebGpuBackend();
 
     WebGpuBackend(const WebGpuBackend&) = delete;
@@ -50,8 +42,8 @@ public:
     WebGpuBackend(WebGpuBackend&& rhs) noexcept;
     WebGpuBackend& operator=(WebGpuBackend&& rhs) noexcept;
 
-    /// @brief Initialize WebGPU context, Depth Buffer, Pipeline, Default Textures, and WGSL Shaders.
-    bool initialize(GLFWwindow* windowHandle, uint32_t width, uint32_t height);
+    /// @brief Initialize WebGPU context, Render Pipeline, Compute Pipeline, and Default Textures.
+    bool initialize(GLFWwindow* windowHandle, uint32_t width, uint32_t height) noexcept;
 
     /// @brief Create an Offscreen Render Target for agent visual cameras.
     OffscreenTarget createOffscreenTarget(uint32_t width = 128, uint32_t height = 128) noexcept;
@@ -100,74 +92,26 @@ public:
         std::vector<float>& outDistances
     ) noexcept;
 
-    [[nodiscard]] bool isInitialized() const noexcept { return _initialized; }
+    [[nodiscard]] bool isInitialized() const noexcept { return _context.isInitialized(); }
     [[nodiscard]] uint64_t frameCount() const noexcept { return _frameCount; }
-    [[nodiscard]] uint32_t width() const noexcept { return _width; }
-    [[nodiscard]] uint32_t height() const noexcept { return _height; }
-    [[nodiscard]] WGPUDevice device() const noexcept { return _device; }
-    [[nodiscard]] WGPUQueue queue() const noexcept { return _queue; }
+    [[nodiscard]] uint32_t width() const noexcept { return _context.width(); }
+    [[nodiscard]] uint32_t height() const noexcept { return _context.height(); }
 
-    [[nodiscard]] const Texture& defaultCheckerTexture() const noexcept { return _defaultCheckerTex; }
-    [[nodiscard]] const Texture& defaultGridTexture() const noexcept { return _defaultGridTex; }
+    [[nodiscard]] WGPUDevice device() const noexcept { return _context.device(); }
+    [[nodiscard]] WGPUQueue queue() const noexcept { return _context.queue(); }
+
+    [[nodiscard]] const Texture& defaultCheckerTexture() const noexcept { return _renderPipeline.defaultCheckerTexture(); }
+    [[nodiscard]] const Texture& defaultGridTexture() const noexcept { return _renderPipeline.defaultGridTexture(); }
 
 private:
-    struct BindGroupCacheEntry {
-        WGPUBindGroup bindGroup = nullptr;
-        WGPUTextureView textureView = nullptr;
-        WGPUSampler sampler = nullptr;
-        WGPUBuffer uboBuffer = nullptr;
-    };
-
-    void createSurface();
-    void configureSurface();
-    void createDepthBuffer();
-    void createPipelineLayout();
-    void createRenderPipeline();
-    void createComputePipeline();
-    void clearRenderPools() noexcept;
     void moveFrom(WebGpuBackend&& rhs) noexcept;
 
-    WGPUBindGroup getOrCreateBindGroup(size_t index, const Texture& texture, WGPUBuffer uboBuffer) noexcept;
-    WGPUBuffer getOrCreateUboBuffer(size_t index) noexcept;
+    WebGpuContext _context{};
+    WebGpuRenderPipeline _renderPipeline{};
+    WebGpuComputePipeline _computePipeline{};
 
-    WGPUInstance _instance = nullptr;
-    WGPUAdapter _adapter = nullptr;
-    WGPUDevice _device = nullptr;
-    WGPUQueue _queue = nullptr;
-    WGPUSurface _surface = nullptr;
-    WGPUTextureFormat _surfaceFormat = WGPUTextureFormat_BGRA8Unorm;
-
-    WGPUTexture _depthTexture = nullptr;
-    WGPUTextureView _depthTextureView = nullptr;
-
-    WGPUBindGroupLayout _bindGroupLayout = nullptr;
-    WGPUPipelineLayout _pipelineLayout = nullptr;
-    WGPURenderPipeline _pipeline = nullptr;
-
-    WGPUBindGroupLayout _computeBindGroupLayout = nullptr;
-    WGPUComputePipeline _computePipeline = nullptr;
-    WGPUBuffer _uniformBuffer = nullptr;
-    std::vector<WGPUBuffer> _uboPool{};
-    std::vector<BindGroupCacheEntry> _bindGroupPool{};
-    size_t _currentUboIndex = 0;
-
-    WGPURenderPassEncoder _currentPass = nullptr;
-    WGPUCommandEncoder _currentEncoder = nullptr;
-    WGPUTexture _currentSurfaceTexture = nullptr;
-    WGPUTextureView _currentColorView = nullptr;
-
-    Texture _defaultCheckerTex{};
-    Texture _defaultGridTex{};
-
-    UniformBufferObject _currentUbo{};
-    GLFWwindow* _window = nullptr;
-
-    uint32_t _width = 1280;
-    uint32_t _height = 720;
-    uint64_t _frameCount = 0;
     WGPUColor _clearColor{ 0.08, 0.09, 0.12, 1.0 };
-    bool _initialized = false;
-    bool _inFrame = false;
+    uint64_t _frameCount = 0;
 };
 
 } // namespace corium_sim::renderer

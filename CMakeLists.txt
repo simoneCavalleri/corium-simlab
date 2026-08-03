@@ -60,8 +60,10 @@ add_library(corium_sim_core STATIC
     src/renderer/MeshLoader.cpp
     src/renderer/SensorCamera.cpp
     src/renderer/Texture.cpp
+    src/renderer/WebGpuContext.cpp
+    src/renderer/WebGpuRenderPipeline.cpp
+    src/renderer/WebGpuComputePipeline.cpp
     src/renderer/WebGpuBackend.cpp
-    src/renderer/WebGpuSurface.cpp
     src/scene/SimScene.cpp
     src/scene/SceneBuilder.cpp
     src/scene/UrdfLoader.cpp
