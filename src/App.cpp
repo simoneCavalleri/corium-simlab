@@ -213,6 +213,9 @@ void SimLabApp::onRender(double deltaTime)
         for (auto& entity : _scene->entities()) {
             if (!entity.mesh.isValid() && device && queue) {
                 switch (entity.shape) {
+                    case scene::EntityShape::Cube:
+                        entity.mesh = renderer::Mesh::createCube(device, queue, 1.0f);
+                        break;
                     case scene::EntityShape::PlaneGrid:
                         entity.mesh = renderer::Mesh::createPlane(device, queue, 60.0f, 60.0f, 60);
                         break;

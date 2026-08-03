@@ -65,8 +65,9 @@ int main(int argc, char** argv)
     auto robotArmSpec = makeAgentSpec()
         // Pillar 2: Agent Model
         .withModel(SimEntity{
-            .name = "base_link",
-            .position = {0.0f, 0.4f, 0.0f},
+            .name = "robot_arm_root",
+            .position = {0.0f, 0.8f, 0.0f},
+            .scale = {0.0f, 0.0f, 0.0f},
             .isStatic = true
         })
         // Pillar 3: Onboard Joint Encoder Sensors
@@ -103,21 +104,33 @@ int main(int argc, char** argv)
             });
 
             // Load URDF Articulated Robot Arm & Joints
-            UrdfLoader::loadURDF("assets/urdf/sample_arm.urdf", scene, nullptr, nullptr, Vec3{0.0f, 0.4f, 0.0f});
+            UrdfLoader::loadURDF("assets/urdf/sample_arm.urdf", scene, nullptr, nullptr, Vec3{0.0f, 0.8f, 0.0f});
 
-
-            // Parallel Two-Finger Gripper End-Effector
+            // Parallel Two-Finger Gripper End-Effector (attached to elbow_link via Fixed joints)
             scene.addEntity(SimEntity{
                 .name = "gripper_finger_l",
                 .material = Material::Matte({0.2f, 0.2f, 0.25f, 1.0f}),
-                .position = {-0.15f, 3.2f, 0.0f},
                 .scale = {0.08f, 0.3f, 0.12f}
             });
             scene.addEntity(SimEntity{
                 .name = "gripper_finger_r",
                 .material = Material::Matte({0.2f, 0.2f, 0.25f, 1.0f}),
-                .position = {0.15f, 3.2f, 0.0f},
                 .scale = {0.08f, 0.3f, 0.12f}
+            });
+
+            scene.addJoint(SimJoint{
+                .name = "joint_finger_l",
+                .parentName = "elbow_link",
+                .childName = "gripper_finger_l",
+                .type = JointType::Fixed,
+                .anchor = {-0.15f, 0.55f, 0.0f}
+            });
+            scene.addJoint(SimJoint{
+                .name = "joint_finger_r",
+                .parentName = "elbow_link",
+                .childName = "gripper_finger_r",
+                .type = JointType::Fixed,
+                .anchor = {0.15f, 0.55f, 0.0f}
             });
 
             // Workpiece Inspection Platform & Red Metallic Target Workpiece
@@ -135,7 +148,7 @@ int main(int argc, char** argv)
                 .scale = {0.6f, 0.5f, 0.6f}
             });
         })
-        .spawnAgent("robot_arm", std::move(robotArmSpec), Vec3{0.0f, 0.4f, 0.0f})
+        .spawnAgent("robot_arm", std::move(robotArmSpec), Vec3{0.0f, 0.8f, 0.0f})
         // Pillar 7: Reward Policy
         .withRewardPolicy(
             RewardBuilder{}
@@ -153,10 +166,9 @@ int main(int argc, char** argv)
         (void)arenaPtr->step(dt);
 
         auto jointTargets = arenaPtr->agent().actuators().template getActuator<0>().targetPositions();
-        if (jointTargets.size() >= 3) {
-            if (auto* jBase     = app.scene().findJoint("joint_base"))     jBase->position     = jointTargets[0];
-            if (auto* jShoulder = app.scene().findJoint("joint_shoulder")) jShoulder->position = jointTargets[1];
-            if (auto* jElbow    = app.scene().findJoint("joint_elbow"))    jElbow->position    = jointTargets[2];
+        if (jointTargets.size() >= 2) {
+            if (auto* jShoulder = app.scene().findJoint("joint_shoulder_yaw")) jShoulder->position = jointTargets[0];
+            if (auto* jElbow    = app.scene().findJoint("joint_elbow_pitch"))   jElbow->position    = jointTargets[1];
         }
     });
 

@@ -35,15 +35,22 @@ void JointKinematics::updateKinematics(scene::SimScene& scene, float deltaTime) 
             }
         } else {
             // Child link pose relative to parent
+            Mat4 Rx = Mat4::rotateX(parent->rotation.x * DEG2RAD);
+            Mat4 Ry = Mat4::rotateY(parent->rotation.y * DEG2RAD);
+            Mat4 Rz = Mat4::rotateZ(parent->rotation.z * DEG2RAD);
+            Mat4 R = Ry * Rx * Rz;
+            Vec4 rotAnchor4 = R * Vec4(joint.anchor, 0.0f);
+            Vec3 rotAnchor{rotAnchor4.x, rotAnchor4.y, rotAnchor4.z};
+
             if (joint.type == JointType::Revolute) {
                 child->rotation = parent->rotation + (joint.axis * (joint.position * RAD2DEG));
-                child->position = parent->position + joint.anchor;
+                child->position = parent->position + rotAnchor;
             } else if (joint.type == JointType::Prismatic) {
                 child->rotation = parent->rotation;
-                child->position = parent->position + joint.anchor + (joint.axis * joint.position);
+                child->position = parent->position + rotAnchor + (joint.axis * joint.position);
             } else if (joint.type == JointType::Fixed) {
                 child->rotation = parent->rotation;
-                child->position = parent->position + joint.anchor;
+                child->position = parent->position + rotAnchor;
             }
         }
     }
