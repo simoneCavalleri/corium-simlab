@@ -10,14 +10,18 @@
 
 namespace corium_sim::scene {
 
+enum class EntityShape { Cube, PlaneGrid, Sphere, Cylinder, MeshModel };
+
 /// @brief 3D Entity in the Simulation Scene (Robots, Obstacles, Targets, Terrains).
 struct SimEntity {
     uint32_t id = 0;
     std::string name{};
+    EntityShape shape = EntityShape::Cube;
 
     renderer::Mesh mesh{};
     renderer::Texture texture{};
     renderer::Material material{};
+
 
     math::Vec3 position{0.0f, 0.0f, 0.0f};
     math::Vec3 rotation{0.0f, 0.0f, 0.0f}; // Euler angles in degrees (X, Y, Z)

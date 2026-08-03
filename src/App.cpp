@@ -79,23 +79,31 @@ void SimLabApp::onInitialize()
     if (device && queue) {
         for (auto& entity : _scene.entities()) {
             if (!entity.mesh.isValid()) {
-                if (entity.name.find("ground") != std::string::npos || entity.name.find("floor") != std::string::npos) {
-                    entity.mesh = renderer::Mesh::createPlane(device, queue, 60.0f, 60.0f, 60);
-                    entity.texture = renderer::Texture::createGridPattern(device, queue, 512, 512);
-                    entity.material = renderer::Material::Matte({0.3f, 0.35f, 0.40f, 1.0f});
-                    entity.localBounds = renderer::BoundingBox{{-30.0f, 0.0f, -30.0f}, {30.0f, 0.0f, 30.0f}};
-                } else if (entity.name.find("goal") != std::string::npos || entity.name.find("target") != std::string::npos) {
-                    entity.mesh = renderer::Mesh::createCube(device, queue, 1.2f);
-                    entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
-                    entity.material = renderer::Material::Metallic({0.95f, 0.15f, 0.15f, 1.0f}, 0.2f);
-                    entity.localBounds = renderer::BoundingBox{{-0.6f, -0.6f, -0.6f}, {0.6f, 0.6f, 0.6f}};
-                } else {
-                    entity.mesh = renderer::Mesh::createCube(device, queue, 1.0f);
-                    entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
-                    if (entity.material.albedo.x == 0.0f && entity.material.albedo.y == 0.0f && entity.material.albedo.z == 0.0f) {
-                        entity.material = renderer::Material::Metallic({0.2f, 0.6f, 0.9f, 1.0f}, 0.3f);
-                    }
-                    entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                switch (entity.shape) {
+                    case scene::EntityShape::PlaneGrid:
+                        entity.mesh = renderer::Mesh::createPlane(device, queue, 60.0f, 60.0f, 60);
+                        entity.texture = renderer::Texture::createGridPattern(device, queue, 512, 512);
+                        if (entity.material.albedo.x == 0.8f && entity.material.albedo.y == 0.8f && entity.material.albedo.z == 0.8f) {
+                            entity.material = renderer::Material::Matte({0.3f, 0.35f, 0.40f, 1.0f});
+                        }
+                        entity.localBounds = renderer::BoundingBox{{-30.0f, 0.0f, -30.0f}, {30.0f, 0.0f, 30.0f}};
+                        break;
+                    case scene::EntityShape::Sphere:
+                        entity.mesh = renderer::Mesh::createSphere(device, queue, 0.5f, 16);
+                        entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                        break;
+                    case scene::EntityShape::Cylinder:
+                        entity.mesh = renderer::Mesh::createCylinder(device, queue, 0.5f, 1.0f, 16);
+                        entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                        break;
+                    case scene::EntityShape::Cube:
+                    default:
+                        entity.mesh = renderer::Mesh::createCube(device, queue, 1.0f);
+                        entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                        break;
                 }
             }
         }
@@ -115,23 +123,31 @@ void SimLabApp::setScene(scene::SimScene scene) noexcept
     if (device && queue) {
         for (auto& entity : _scene.entities()) {
             if (!entity.mesh.isValid()) {
-                if (entity.name.find("ground") != std::string::npos || entity.name.find("floor") != std::string::npos) {
-                    entity.mesh = renderer::Mesh::createPlane(device, queue, 60.0f, 60.0f, 60);
-                    entity.texture = renderer::Texture::createGridPattern(device, queue, 512, 512);
-                    entity.material = renderer::Material::Matte({0.3f, 0.35f, 0.40f, 1.0f});
-                    entity.localBounds = renderer::BoundingBox{{-30.0f, 0.0f, -30.0f}, {30.0f, 0.0f, 30.0f}};
-                } else if (entity.name.find("goal") != std::string::npos || entity.name.find("target") != std::string::npos) {
-                    entity.mesh = renderer::Mesh::createCube(device, queue, 1.2f);
-                    entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
-                    entity.material = renderer::Material::Metallic({0.95f, 0.15f, 0.15f, 1.0f}, 0.2f);
-                    entity.localBounds = renderer::BoundingBox{{-0.6f, -0.6f, -0.6f}, {0.6f, 0.6f, 0.6f}};
-                } else {
-                    entity.mesh = renderer::Mesh::createCube(device, queue, 1.0f);
-                    entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
-                    if (entity.material.albedo.x == 0.0f && entity.material.albedo.y == 0.0f && entity.material.albedo.z == 0.0f) {
-                        entity.material = renderer::Material::Metallic({0.2f, 0.6f, 0.9f, 1.0f}, 0.3f);
-                    }
-                    entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                switch (entity.shape) {
+                    case scene::EntityShape::PlaneGrid:
+                        entity.mesh = renderer::Mesh::createPlane(device, queue, 60.0f, 60.0f, 60);
+                        entity.texture = renderer::Texture::createGridPattern(device, queue, 512, 512);
+                        if (entity.material.albedo.x == 0.8f && entity.material.albedo.y == 0.8f && entity.material.albedo.z == 0.8f) {
+                            entity.material = renderer::Material::Matte({0.3f, 0.35f, 0.40f, 1.0f});
+                        }
+                        entity.localBounds = renderer::BoundingBox{{-30.0f, 0.0f, -30.0f}, {30.0f, 0.0f, 30.0f}};
+                        break;
+                    case scene::EntityShape::Sphere:
+                        entity.mesh = renderer::Mesh::createSphere(device, queue, 0.5f, 16);
+                        entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                        break;
+                    case scene::EntityShape::Cylinder:
+                        entity.mesh = renderer::Mesh::createCylinder(device, queue, 0.5f, 1.0f, 16);
+                        entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                        break;
+                    case scene::EntityShape::Cube:
+                    default:
+                        entity.mesh = renderer::Mesh::createCube(device, queue, 1.0f);
+                        entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                        break;
                 }
             }
         }
@@ -141,6 +157,8 @@ void SimLabApp::setScene(scene::SimScene scene) noexcept
         }
     }
 }
+
+
 
 void SimLabApp::resetEnvironment() noexcept
 {

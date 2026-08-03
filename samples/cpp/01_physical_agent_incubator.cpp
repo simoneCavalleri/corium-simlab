@@ -111,8 +111,9 @@ int main(int argc, char** argv)
 
     auto incubator = makeIncubator<KinematicPhysicsEngine>()
         .withEnvironment([](SimScene& scene) {
-            scene.addEntity(SimEntity{.name = "user_ground", .isStatic = true});
+            scene.addEntity(SimEntity{.name = "user_ground", .shape = EntityShape::PlaneGrid, .isStatic = true});
             scene.addEntity(SimEntity{
+
                 .name = "target_goal",
                 .material = Material::Metallic({0.95f, 0.15f, 0.15f, 1.0f}, 0.20f),
                 .position = {4.0f, 0.75f, -2.0f},
