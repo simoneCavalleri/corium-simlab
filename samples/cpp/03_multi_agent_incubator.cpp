@@ -36,67 +36,66 @@ int main(int argc, char** argv)
 
     runtime.initialize(app);
 
-    app.setSceneSetup([](SimLabApp& appInstance, WGPUDevice device, WGPUQueue queue) {
-        // ---------------------------------------------------------------------
-        // 1. DEFINE REUSABLE AGENT SPECIFICATION BLUEPRINT ONCE
-        // ---------------------------------------------------------------------
-        std::cout << "[Step 1] Constructing Reusable AMR Swarm AgentSpec Blueprint...\n";
+    // -------------------------------------------------------------------------
+    // 1. DEFINE REUSABLE AGENT SPECIFICATION BLUEPRINT ONCE
+    // -------------------------------------------------------------------------
+    std::cout << "[Step 1] Constructing Reusable AMR Swarm AgentSpec Blueprint...\n";
 
-        auto amrSwarmSpec = makeAgentSpec()
-            .withModel(SimEntity{.name = "amr_base", .mass = 12.0f})
-            .withSensors(
-                sensors::ImuSensor{},
-                sensors::RaycastLidarSensor<360>{}
-            )
-            .withoutPerceptionChain()
-            .withActuators(
-                actuators::DifferentialDriveActuator{}
-            )
-            .withPolicy(SwarmFollowerPolicy{});
+    auto amrSwarmSpec = makeAgentSpec()
+        .withModel(SimEntity{.name = "amr_base", .mass = 12.0f})
+        .withSensors(
+            sensors::ImuSensor{},
+            sensors::RaycastLidarSensor<360>{}
+        )
+        .withoutPerceptionChain()
+        .withActuators(
+            actuators::DifferentialDriveActuator{}
+        )
+        .withPolicy(SwarmFollowerPolicy{});
 
-        // ---------------------------------------------------------------------
-        // 2. CONSTRUCT 3D WEBGPU MULTI-AGENT SCENE & SPAWN SWARM
-        // ---------------------------------------------------------------------
-        std::cout << "[Step 2] Constructing 3D Scene & Spawning Swarm AMRs...\n";
+    // -------------------------------------------------------------------------
+    // 2. CONSTRUCT 3D WEBGPU MULTI-AGENT SCENE & SPAWN SWARM
+    // -------------------------------------------------------------------------
+    std::cout << "[Step 2] Constructing 3D Scene & Spawning Swarm AMRs...\n";
 
-        auto incubator = makeIncubator<KinematicPhysicsEngine>()
-            .withEnvironment([device, queue](SimScene& scene) {
-                scene = SceneBuilder(device, queue)
-                    .addGroundGrid(60.0f, 60.0f, 60)
-                    .addCube(
-                        "amr_follower_1",
-                        Vec3{-2.0f, 0.5f, -1.0f},
-                        Vec3{1.0f, 0.8f, 1.0f},
-                        Vec3{0.0f, 0.0f, 0.0f},
-                        Material::Metallic({0.2f, 0.6f, 0.9f, 1.0f}, 0.2f)
-                    )
-                    .addCube(
-                        "amr_follower_2",
-                        Vec3{2.0f, 0.5f, -1.0f},
-                        Vec3{1.0f, 0.8f, 1.0f},
-                        Vec3{0.0f, 0.0f, 0.0f},
-                        Material::Metallic({0.2f, 0.6f, 0.9f, 1.0f}, 0.2f)
-                    )
-                    .addCube(
-                        "target_waypoint",
-                        Vec3{0.0f, 0.75f, 10.0f},
-                        Vec3{1.5f, 1.5f, 1.5f},
-                        Vec3{0.0f, 0.0f, 0.0f},
-                        Material::Metallic({0.1f, 0.9f, 0.2f, 1.0f}, 0.1f), // Glowing Green Target
-                        true // isStatic
-                    )
-                    .build();
-            })
-            .spawnAgent("amr_leader", std::move(amrSwarmSpec), Vec3{0.0f, 0.5f, 0.0f})
-            .withRewardPolicy(
-                RewardBuilder{}
-                    .addTerm<DistanceToGoalPenalty>(1.0f)
-                    .addTerm<GoalReachedBonus>(200.0f)
-            );
+    auto incubator = makeIncubator<KinematicPhysicsEngine>()
+        .withEnvironment([](SimScene& scene) {
+            scene.addEntity(SimEntity{.name = "user_ground", .isStatic = true});
+            scene.addEntity(SimEntity{
+                .name = "amr_follower_1",
+                .material = Material::Metallic({0.2f, 0.6f, 0.9f, 1.0f}, 0.2f),
+                .position = {-2.0f, 0.5f, -1.0f},
+                .scale = {1.0f, 0.8f, 1.0f}
+            });
+            scene.addEntity(SimEntity{
+                .name = "amr_follower_2",
+                .material = Material::Metallic({0.2f, 0.6f, 0.9f, 1.0f}, 0.2f),
+                .position = {2.0f, 0.5f, -1.0f},
+                .scale = {1.0f, 0.8f, 1.0f}
+            });
+            scene.addEntity(SimEntity{
+                .name = "target_waypoint",
+                .material = Material::Metallic({0.1f, 0.9f, 0.2f, 1.0f}, 0.1f),
+                .position = {0.0f, 0.75f, 10.0f},
+                .scale = {1.5f, 1.5f, 1.5f},
+                .isStatic = true
+            });
+        })
+        .spawnAgent("amr_leader", std::move(amrSwarmSpec), Vec3{0.0f, 0.5f, 0.0f})
+        .withRewardPolicy(
+            RewardBuilder{}
+                .addTerm<DistanceToGoalPenalty>(1.0f)
+                .addTerm<GoalReachedBonus>(200.0f)
+        );
 
-        appInstance.setScene(std::move(incubator.env().scene()));
-        std::cout << "  - 3D Multi-Agent Swarm Environment initialized successfully!\n\n";
+    auto incubatorPtr = std::make_shared<decltype(incubator)>(std::move(incubator));
+
+    app.onStep([incubatorPtr](SimLabApp&, float dt) {
+        incubatorPtr->step(dt);
     });
+
+    app.setScene(std::move(incubatorPtr->env().scene()));
+    std::cout << "  - 3D Multi-Agent Swarm Environment initialized successfully!\n\n";
 
     // -------------------------------------------------------------------------
     // 3. RUN 3D INTERACTIVE WEBGPU RENDERING & SIMULATION LOOP
