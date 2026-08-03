@@ -149,17 +149,83 @@ void SimLabApp::onInitialize()
 
     _sensorTarget = _gpuBackend.createOffscreenTarget(128, 128);
     CORIUM_LOG_INFO("SimLab", "3D WebGPU Engine & ", _config.sensorWidth, "x", _config.sensorHeight, " Offscreen Sensor Camera Target Initialized.");
+
+    WGPUDevice device = _gpuBackend.device();
+    WGPUQueue queue = _gpuBackend.queue();
+    if (device && queue) {
+        if (_sceneSetupFn) {
+            _sceneSetupFn(*this, device, queue);
+        }
+
+        for (auto& entity : scene().entities()) {
+
+            if (!entity.mesh.isValid()) {
+                if (entity.name.find("ground") != std::string::npos) {
+                    entity.mesh = renderer::Mesh::createPlane(device, queue, 60.0f, 60.0f, 60);
+                    entity.texture = renderer::Texture::createGridPattern(device, queue, 512, 512);
+                    entity.material = renderer::Material::Matte({0.3f, 0.35f, 0.40f, 1.0f});
+                    entity.localBounds = renderer::BoundingBox{{-30.0f, 0.0f, -30.0f}, {30.0f, 0.0f, 30.0f}};
+                } else if (entity.name.find("goal") != std::string::npos || entity.name.find("target") != std::string::npos) {
+                    entity.mesh = renderer::Mesh::createCube(device, queue, 1.2f);
+                    entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                    entity.material = renderer::Material::Metallic({0.95f, 0.15f, 0.15f, 1.0f}, 0.2f);
+                    entity.localBounds = renderer::BoundingBox{{-0.6f, -0.6f, -0.6f}, {0.6f, 0.6f, 0.6f}};
+                } else {
+                    entity.mesh = renderer::Mesh::createCube(device, queue, 1.0f);
+                    entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                    if (entity.material.albedo.x == 0.0f && entity.material.albedo.y == 0.0f && entity.material.albedo.z == 0.0f) {
+
+                        entity.material = renderer::Material::Metallic({0.2f, 0.6f, 0.9f, 1.0f}, 0.3f);
+                    }
+                    entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                }
+            }
+        }
+        if (scene().entityCount() > 0) {
+            renderer::BoundingBox bounds = scene().sceneBounds();
+            _camera.focusOnBounds(bounds.min, bounds.max);
+        }
+    }
 }
 
 void SimLabApp::setScene(scene::SimScene scene) noexcept
 {
     _environment = environment::SimEnvironment(std::move(scene));
     _jointKinematics.updateKinematics(this->scene(), 0.0f);
-    if (_gpuBackend.isInitialized() && this->scene().entityCount() > 0) {
-        renderer::BoundingBox bounds = this->scene().sceneBounds();
-        _camera.focusOnBounds(bounds.min, bounds.max);
+
+    WGPUDevice device = _gpuBackend.device();
+    WGPUQueue queue = _gpuBackend.queue();
+    if (device && queue) {
+        for (auto& entity : this->scene().entities()) {
+            if (!entity.mesh.isValid()) {
+                if (entity.name.find("ground") != std::string::npos) {
+                    entity.mesh = renderer::Mesh::createPlane(device, queue, 60.0f, 60.0f, 60);
+                    entity.texture = renderer::Texture::createGridPattern(device, queue, 512, 512);
+                    entity.material = renderer::Material::Matte({0.3f, 0.35f, 0.40f, 1.0f});
+                    entity.localBounds = renderer::BoundingBox{{-30.0f, 0.0f, -30.0f}, {30.0f, 0.0f, 30.0f}};
+                } else if (entity.name.find("goal") != std::string::npos || entity.name.find("target") != std::string::npos) {
+                    entity.mesh = renderer::Mesh::createCube(device, queue, 1.2f);
+                    entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                    entity.material = renderer::Material::Metallic({0.95f, 0.15f, 0.15f, 1.0f}, 0.2f);
+                    entity.localBounds = renderer::BoundingBox{{-0.6f, -0.6f, -0.6f}, {0.6f, 0.6f, 0.6f}};
+                } else {
+                    entity.mesh = renderer::Mesh::createCube(device, queue, 1.0f);
+                    entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                    if (entity.material.albedo.x == 0.0f && entity.material.albedo.y == 0.0f && entity.material.albedo.z == 0.0f) {
+
+                        entity.material = renderer::Material::Metallic({0.2f, 0.6f, 0.9f, 1.0f}, 0.3f);
+                    }
+                    entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                }
+            }
+        }
+        if (this->scene().entityCount() > 0) {
+            renderer::BoundingBox bounds = this->scene().sceneBounds();
+            _camera.focusOnBounds(bounds.min, bounds.max);
+        }
     }
 }
+
 
 void SimLabApp::resetEnvironment() noexcept
 {
@@ -222,9 +288,11 @@ void SimLabApp::onRender(double deltaTime)
     _jointKinematics.updateKinematics(scene(), dt);
     _simStepCount++;
 
-    // 2. Evaluate Agent State & Dense Rewards
-    scene::SimEntity* agent = scene().findEntity("agent_robot");
+    // 2. Evaluate Agent State & Animate 3D Motion
+    scene::SimEntity* agent = scene().findEntity("amr_leader");
+    if (!agent) agent = scene().findEntity("amr_robot");
     if (!agent) agent = scene().findEntity("robot_agent");
+    if (!agent) agent = scene().findEntity("agent_robot");
     if (!agent) agent = scene().findEntity("agent");
     if (!agent) {
         for (auto& entity : scene().entities()) {
@@ -237,6 +305,20 @@ void SimLabApp::onRender(double deltaTime)
 
     scene::SimEntity* target = scene().findEntity("target_goal");
     if (!target) target = scene().findEntity("target_box");
+    if (!target) target = scene().findEntity("target_workpiece");
+    if (!target) target = scene().findEntity("target_waypoint");
+
+    if (agent && !agent->isStatic) {
+        Vec3 targetPos = target ? target->position : Vec3{4.0f, 0.75f, -2.0f};
+        Vec3 dir = targetPos - agent->position;
+        float dist = dir.length();
+        if (dist > 0.15f) {
+            Vec3 moveDir = dir.normalized();
+            agent->position += moveDir * (2.0f * dt);
+            agent->rotation.y = std::atan2(moveDir.x, moveDir.z) * RAD2DEG;
+        }
+    }
+
 
     if (agent) {
         Vec3 agentPos = agent->position;

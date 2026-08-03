@@ -12,6 +12,12 @@
 #include "corium_sim/scene/SceneBuilder.hpp"
 #include "corium_sim/environment/SimEnvironment.hpp"
 
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <string>
+#include <utility>
+
 #include <corium/corium.hpp>
 #include <corium/ui/WindowApp.hpp>
 #include <corium/ui/backends/GlfwWindowBackend.hpp>
@@ -67,6 +73,9 @@ public:
     [[nodiscard]] const SimConfig& config() const noexcept { return _config; }
     [[nodiscard]] SimConfig& config() noexcept { return _config; }
 
+    using SceneSetupFn = std::function<void(SimLabApp&, WGPUDevice, WGPUQueue)>;
+    void setSceneSetup(SceneSetupFn fn) { _sceneSetupFn = std::move(fn); }
+
 private:
     renderer::WebGpuBackend _gpuBackend{};
     renderer::Camera _camera{};
@@ -77,6 +86,8 @@ private:
 
     kinematics::JointKinematics _jointKinematics{};
     SimConfig _config{};
+    SceneSetupFn _sceneSetupFn{};
+
 
 
     uint32_t _renderFramesCount = 0;

@@ -17,6 +17,7 @@ int main(int argc, char** argv)
 
     std::cout << "=========================================================\n";
     std::cout << " Corium SimLab Sample #02: Industrial Robotic Manipulator Workstation\n";
+    std::cout << " Features: 3D WebGPU Graphics | URDF Robot Loading | Inverse Kinematics\n";
     std::cout << "=========================================================\n\n";
 
     SimRuntime runtime;
@@ -24,10 +25,7 @@ int main(int argc, char** argv)
 
     runtime.initialize(app);
 
-    WGPUDevice device = app.renderer().device();
-    WGPUQueue queue = app.renderer().queue();
-
-    if (device && queue) {
+    app.setSceneSetup([](SimLabApp& appInstance, WGPUDevice device, WGPUQueue queue) {
         auto envScene = scene::SimScene::builder(device, queue)
             // 1. Concrete Factory Floor Grid
             .addGroundGrid(60.0f, 60.0f, 60)
@@ -67,7 +65,7 @@ int main(int argc, char** argv)
                 "elbow_link",
                 "gripper_finger_l",
                 JointType::Prismatic,
-                Vec3{-0.15f, 0.3f, 0.0f}, // Linear slide inwards/outwards
+                Vec3{-0.15f, 0.3f, 0.0f},
                 Vec3{-1.0f, 0.0f, 0.0f},
                 0.0f, 0.1f
             )
@@ -81,7 +79,7 @@ int main(int argc, char** argv)
                 0.0f, 0.1f
             )
 
-            // 7. Workpiece Inspection Platform & Red Metallic Target Block
+            // 6. Workpiece Inspection Platform & Red Metallic Target Block
             .addCube(
                 "inspection_platform",
                 Vec3{3.5f, 0.5f, -1.5f},
@@ -98,7 +96,7 @@ int main(int argc, char** argv)
                 Material::Metallic({0.95f, 0.10f, 0.15f, 1.0f}, 0.10f) // Anodized Red Metal Workpiece Target
             )
 
-            // 8. Industrial Safety Warning Barrier
+            // 7. Industrial Safety Warning Barrier
             .addCube(
                 "safety_barrier",
                 Vec3{-2.5f, 0.6f, 2.5f},
@@ -109,10 +107,13 @@ int main(int argc, char** argv)
             )
             .build();
 
-        app.setScene(std::move(envScene));
-    }
+        appInstance.setScene(std::move(envScene));
+        std::cout << "[3D Scene] Industrial Workstation & URDF Robotic Arm Loaded Successfully!\n";
+    });
 
+    std::cout << "[Step 3] Launching 3D Interactive WebGPU Graphics Window...\n";
     app.run(runtime);
+
     runtime.shutdown();
     return 0;
 }
