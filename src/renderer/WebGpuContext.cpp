@@ -87,18 +87,33 @@ bool WebGpuContext::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
         WGPURequestAdapterOptions adapterOpts{};
         adapterOpts.compatibleSurface = _surface;
 
+        struct AdapterRequestData {
+            WGPUAdapter adapter = nullptr;
+            bool done = false;
+        } adapterData;
+
         wgpuInstanceRequestAdapter(
             _instance,
             &adapterOpts,
             [](WGPURequestAdapterStatus status, WGPUAdapter adapter, const char* message, void* userdata) {
-                if (status == WGPURequestAdapterStatus_Success && userdata) {
-                    *static_cast<WGPUAdapter*>(userdata) = adapter;
+                auto* data = static_cast<AdapterRequestData*>(userdata);
+                if (status == WGPURequestAdapterStatus_Success && data) {
+                    data->adapter = adapter;
                 } else if (message) {
                     CORIUM_LOG_ERROR("WebGpuContext", "Adapter request failed: ", message);
                 }
+                if (data) {
+                    data->done = true;
+                }
             },
-            &_adapter
+            &adapterData
         );
+
+        while (!adapterData.done) {
+            wgpuInstanceProcessEvents(_instance);
+        }
+
+        _adapter = adapterData.adapter;
     }
 
     if (_adapter) {
@@ -107,18 +122,34 @@ bool WebGpuContext::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
         CORIUM_LOG_INFO("WebGpuContext", "GPU Adapter: ", props.name, " (BackendType=", props.backendType, ")");
 
         WGPUDeviceDescriptor deviceDesc{};
+
+        struct DeviceRequestData {
+            WGPUDevice device = nullptr;
+            bool done = false;
+        } deviceData;
+
         wgpuAdapterRequestDevice(
             _adapter,
             &deviceDesc,
             [](WGPURequestDeviceStatus status, WGPUDevice device, const char* message, void* userdata) {
-                if (status == WGPURequestDeviceStatus_Success && userdata) {
-                    *static_cast<WGPUDevice*>(userdata) = device;
+                auto* data = static_cast<DeviceRequestData*>(userdata);
+                if (status == WGPURequestDeviceStatus_Success && data) {
+                    data->device = device;
                 } else if (message) {
                     CORIUM_LOG_ERROR("WebGpuContext", "Device request failed: ", message);
                 }
+                if (data) {
+                    data->done = true;
+                }
             },
-            &_device
+            &deviceData
         );
+
+        while (!deviceData.done) {
+            wgpuInstanceProcessEvents(_instance);
+        }
+
+        _device = deviceData.device;
     }
 
     if (_device) {
@@ -133,11 +164,12 @@ bool WebGpuContext::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
         createDepthBuffer();
     }
 
-    _initialized = (_device != nullptr && _queue != nullptr);
+    _initialized = (_device != nullptr && _queue != nullptr && _depthTextureView != nullptr);
     if (_initialized) {
         CORIUM_LOG_INFO("WebGpuContext", "WebGPU Context initialized successfully!");
     } else {
         CORIUM_LOG_ERROR("WebGpuContext", "Failed to initialize WebGPU context.");
+        shutdown();
     }
     return _initialized;
 }
@@ -167,8 +199,6 @@ void WebGpuContext::present() noexcept
 
 void WebGpuContext::shutdown() noexcept
 {
-    if (!_initialized) return;
-
     safeRelease<WGPUTextureView, wgpuTextureViewRelease>(_depthTextureView);
     safeDestroyAndRelease<WGPUTexture, wgpuTextureDestroy, wgpuTextureRelease>(_depthTexture);
     safeRelease<WGPUQueue, wgpuQueueRelease>(_queue);
@@ -195,19 +225,54 @@ void WebGpuContext::shutdown() noexcept
 
 void WebGpuContext::createSurface() noexcept
 {
-#if defined(__linux__) && defined(GLFW_EXPOSE_NATIVE_X11)
-    WGPUSurfaceDescriptorFromXlibWindow x11Desc{};
-    x11Desc.chain.sType = WGPUSType_SurfaceDescriptorFromXlibWindow;
-    x11Desc.display = glfwGetX11Display();
-    x11Desc.window = glfwGetX11Window(_window);
+#if defined(__linux__)
+#if defined(GLFW_EXPOSE_NATIVE_WAYLAND)
+    if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND) {
+        struct wl_display* display = glfwGetWaylandDisplay();
+        struct wl_surface* surface = glfwGetWaylandWindow(_window);
+        if (display && surface) {
+            WGPUSurfaceDescriptorFromWaylandSurface waylandDesc{};
+            waylandDesc.chain.sType = WGPUSType_SurfaceDescriptorFromWaylandSurface;
+            waylandDesc.display = display;
+            waylandDesc.surface = surface;
 
-    WGPUSurfaceDescriptor surfaceDesc{};
-    surfaceDesc.nextInChain = &x11Desc.chain;
+            WGPUSurfaceDescriptor surfaceDesc{};
+            surfaceDesc.nextInChain = &waylandDesc.chain;
 
-    _surface = wgpuInstanceCreateSurface(_instance, &surfaceDesc);
-    if (_surface) {
-        CORIUM_LOG_INFO("WebGpuContext", "WGPUSurface created successfully via X11.");
+            _surface = wgpuInstanceCreateSurface(_instance, &surfaceDesc);
+            if (_surface) {
+                CORIUM_LOG_INFO("WebGpuContext", "WGPUSurface created successfully via Wayland.");
+            } else {
+                CORIUM_LOG_ERROR("WebGpuContext", "Failed to create WGPUSurface via Wayland.");
+            }
+            return;
+        }
     }
+#endif
+
+#if defined(GLFW_EXPOSE_NATIVE_X11)
+    if (glfwGetPlatform() == GLFW_PLATFORM_X11) {
+        Display* display = glfwGetX11Display();
+        Window window = glfwGetX11Window(_window);
+        if (display && window) {
+            WGPUSurfaceDescriptorFromXlibWindow x11Desc{};
+            x11Desc.chain.sType = WGPUSType_SurfaceDescriptorFromXlibWindow;
+            x11Desc.display = display;
+            x11Desc.window = window;
+
+            WGPUSurfaceDescriptor surfaceDesc{};
+            surfaceDesc.nextInChain = &x11Desc.chain;
+
+            _surface = wgpuInstanceCreateSurface(_instance, &surfaceDesc);
+            if (_surface) {
+                CORIUM_LOG_INFO("WebGpuContext", "WGPUSurface created successfully via X11.");
+            } else {
+                CORIUM_LOG_ERROR("WebGpuContext", "Failed to create WGPUSurface via X11.");
+            }
+            return;
+        }
+    }
+#endif
 #endif
 }
 
@@ -217,21 +282,35 @@ void WebGpuContext::configureSurface() noexcept
         WGPUSurfaceCapabilities caps{};
         wgpuSurfaceGetCapabilities(_surface, _adapter, &caps);
 
-        _surfaceFormat = WGPUTextureFormat_BGRA8Unorm;
+        _surfaceFormat = WGPUTextureFormat_BGRA8UnormSrgb;
         if (caps.formatCount > 0) {
-            _surfaceFormat = caps.formats[0];
+            _surfaceFormat = caps.formats[0]; // Usually already Srgb on modern systems
+            for (size_t i = 0; i < caps.formatCount; ++i) {
+                if (caps.formats[i] == WGPUTextureFormat_BGRA8UnormSrgb || caps.formats[i] == WGPUTextureFormat_RGBA8UnormSrgb) {
+                    _surfaceFormat = caps.formats[i];
+                    break;
+                }
+            }
         }
 
         WGPUSurfaceConfiguration config{};
         config.device = _device;
         config.format = _surfaceFormat;
+        config.alphaMode = WGPUCompositeAlphaMode_Opaque;
+        for (size_t i = 0; i < caps.alphaModeCount; ++i) {
+            if (caps.alphaModes[i] == WGPUCompositeAlphaMode_Opaque) {
+                config.alphaMode = WGPUCompositeAlphaMode_Opaque;
+                break;
+            }
+        }
         config.usage = WGPUTextureUsage_RenderAttachment;
-        config.alphaMode = caps.alphaModeCount > 0 ? caps.alphaModes[0] : WGPUCompositeAlphaMode_Auto;
         config.width = _width;
         config.height = _height;
         config.presentMode = WGPUPresentMode_Fifo;
 
         wgpuSurfaceConfigure(_surface, &config);
+
+        wgpuSurfaceCapabilitiesFreeMembers(caps);
     }
 }
 
@@ -249,6 +328,10 @@ void WebGpuContext::createDepthBuffer() noexcept
     depthDesc.sampleCount = 1;
 
     _depthTexture = wgpuDeviceCreateTexture(_device, &depthDesc);
+    if (!_depthTexture) {
+        CORIUM_LOG_ERROR("WebGpuContext", "Failed to create depth texture (", _width, "x", _height, ").");
+        return;
+    }
 
     WGPUTextureViewDescriptor viewDesc{};
     viewDesc.format = WGPUTextureFormat_Depth24Plus;
@@ -260,6 +343,9 @@ void WebGpuContext::createDepthBuffer() noexcept
     viewDesc.aspect = WGPUTextureAspect_DepthOnly;
 
     _depthTextureView = wgpuTextureCreateView(_depthTexture, &viewDesc);
+    if (!_depthTextureView) {
+        CORIUM_LOG_ERROR("WebGpuContext", "Failed to create depth texture view.");
+    }
 }
 
 void WebGpuContext::moveFrom(WebGpuContext&& rhs) noexcept

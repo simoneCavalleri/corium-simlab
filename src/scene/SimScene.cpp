@@ -55,7 +55,16 @@ SimEntity* SimScene::findEntity(const std::string& name) noexcept
 {
     auto it = _entityIndex.find(name);
     if (it != _entityIndex.end() && it->second < _entities.size()) {
-        return &_entities[it->second];
+        if (_entities[it->second].name == name) {
+            return &_entities[it->second];
+        }
+    }
+    // Fallback linear scan if index lookup fails or is out of sync
+    for (std::size_t i = 0; i < _entities.size(); ++i) {
+        if (_entities[i].name == name) {
+            _entityIndex[name] = i; // Repair cache index
+            return &_entities[i];
+        }
     }
     return nullptr;
 }

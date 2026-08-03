@@ -61,7 +61,11 @@ bool WebGpuBackend::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
         return false;
     }
 
-    _computePipeline.initialize(_context.device());
+    if (!_computePipeline.initialize(_context.device())) {
+        CORIUM_LOG_ERROR("WebGpuBackend", "Failed to initialize WGSL Compute Pipeline.");
+        return false;
+    }
+
     CORIUM_LOG_INFO("WebGpuBackend", "3D WebGPU Renderer Facade Initialized successfully!");
     return true;
 }
@@ -152,14 +156,18 @@ OffscreenTarget WebGpuBackend::createOffscreenTarget(uint32_t width, uint32_t he
     colDesc.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopySrc;
     colDesc.dimension = WGPUTextureDimension_2D;
     colDesc.size = { width, height, 1 };
-    colDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    colDesc.format = WGPUTextureFormat_RGBA8UnormSrgb;
     colDesc.mipLevelCount = 1;
     colDesc.sampleCount = 1;
 
     target.colorTexture = wgpuDeviceCreateTexture(_context.device(), &colDesc);
+    if (!target.colorTexture) {
+        CORIUM_LOG_ERROR("WebGpuBackend", "Failed to create offscreen color texture.");
+        return target;
+    }
 
     WGPUTextureViewDescriptor colViewDesc{};
-    colViewDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    colViewDesc.format = WGPUTextureFormat_RGBA8UnormSrgb;
     colViewDesc.dimension = WGPUTextureViewDimension_2D;
     colViewDesc.baseMipLevel = 0;
     colViewDesc.mipLevelCount = 1;
@@ -168,6 +176,12 @@ OffscreenTarget WebGpuBackend::createOffscreenTarget(uint32_t width, uint32_t he
     colViewDesc.aspect = WGPUTextureAspect_All;
 
     target.colorView = wgpuTextureCreateView(target.colorTexture, &colViewDesc);
+    if (!target.colorView) {
+        CORIUM_LOG_ERROR("WebGpuBackend", "Failed to create offscreen color view.");
+        target.isValid = true; // Temporary for cleanup
+        destroyOffscreenTarget(target);
+        return target;
+    }
 
     WGPUTextureDescriptor depthDesc{};
     depthDesc.usage = WGPUTextureUsage_RenderAttachment;
@@ -178,6 +192,12 @@ OffscreenTarget WebGpuBackend::createOffscreenTarget(uint32_t width, uint32_t he
     depthDesc.sampleCount = 1;
 
     target.depthTexture = wgpuDeviceCreateTexture(_context.device(), &depthDesc);
+    if (!target.depthTexture) {
+        CORIUM_LOG_ERROR("WebGpuBackend", "Failed to create offscreen depth texture.");
+        target.isValid = true;
+        destroyOffscreenTarget(target);
+        return target;
+    }
 
     WGPUTextureViewDescriptor depthViewDesc{};
     depthViewDesc.format = WGPUTextureFormat_Depth24Plus;
@@ -189,6 +209,12 @@ OffscreenTarget WebGpuBackend::createOffscreenTarget(uint32_t width, uint32_t he
     depthViewDesc.aspect = WGPUTextureAspect_DepthOnly;
 
     target.depthView = wgpuTextureCreateView(target.depthTexture, &depthViewDesc);
+    if (!target.depthView) {
+        CORIUM_LOG_ERROR("WebGpuBackend", "Failed to create offscreen depth view.");
+        target.isValid = true;
+        destroyOffscreenTarget(target);
+        return target;
+    }
 
     WGPUBufferDescriptor bufDesc{};
     bufDesc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
@@ -196,8 +222,14 @@ OffscreenTarget WebGpuBackend::createOffscreenTarget(uint32_t width, uint32_t he
     bufDesc.mappedAtCreation = false;
 
     target.stagingBuffer = wgpuDeviceCreateBuffer(_context.device(), &bufDesc);
-    target.isValid = (target.colorTexture && target.colorView && target.stagingBuffer);
+    if (!target.stagingBuffer) {
+        CORIUM_LOG_ERROR("WebGpuBackend", "Failed to create offscreen staging buffer.");
+        target.isValid = true;
+        destroyOffscreenTarget(target);
+        return target;
+    }
 
+    target.isValid = true;
     return target;
 }
 
@@ -205,29 +237,26 @@ void WebGpuBackend::renderOffscreen(const OffscreenTarget& target, const Camera&
 {
     if (!target.isValid || !_context.device() || !_context.queue()) return;
 
+    if (_renderPipeline.beginOffscreenFrame(
+            _context.device(), 
+            _context.queue(), 
+            target.colorView, 
+            target.depthView, 
+            camera, 
+            _clearColor, 
+            0.0f)) 
+    {
+        for (const auto& entity : scene.entities()) {
+            if (entity.mesh.isValid()) {
+                const auto& tex = entity.texture.isValid() ? entity.texture : _renderPipeline.defaultCheckerTexture();
+                _renderPipeline.drawMesh(_context.queue(), entity.mesh, tex, entity.transformMatrix(), entity.material);
+            }
+        }
+        _renderPipeline.endOffscreenFrame(_context.queue());
+    }
+
     WGPUCommandEncoderDescriptor encDesc{};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(_context.device(), &encDesc);
-
-    WGPURenderPassColorAttachment colAttach{};
-    colAttach.view = target.colorView;
-    colAttach.loadOp = WGPULoadOp_Clear;
-    colAttach.storeOp = WGPUStoreOp_Store;
-    colAttach.clearValue = _clearColor;
-
-    WGPURenderPassDepthStencilAttachment depthAttach{};
-    depthAttach.view = target.depthView;
-    depthAttach.depthClearValue = 1.0f;
-    depthAttach.depthLoadOp = WGPULoadOp_Clear;
-    depthAttach.depthStoreOp = WGPUStoreOp_Store;
-
-    WGPURenderPassDescriptor passDesc{};
-    passDesc.colorAttachmentCount = 1;
-    passDesc.colorAttachments = &colAttach;
-    passDesc.depthStencilAttachment = &depthAttach;
-
-    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
-    wgpuRenderPassEncoderEnd(pass);
-    wgpuRenderPassEncoderRelease(pass);
 
     WGPUImageCopyTexture copySrc{};
     copySrc.texture = target.colorTexture;

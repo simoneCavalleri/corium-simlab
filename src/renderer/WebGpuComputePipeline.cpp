@@ -118,6 +118,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     WGPUShaderModuleDescriptor shaderDesc{};
     shaderDesc.nextInChain = &wgslDesc.chain;
     WGPUShaderModule computeModule = wgpuDeviceCreateShaderModule(device, &shaderDesc);
+    if (!computeModule) {
+        CORIUM_LOG_ERROR("WebGpuComputePipeline", "Failed to create WGSL Shader Module.");
+        shutdown();
+        return false;
+    }
 
     WGPUBindGroupLayoutEntry entries[3]{};
     entries[0].binding = 0;
@@ -136,11 +141,23 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     bglDesc.entryCount = 3;
     bglDesc.entries = entries;
     _computeBindGroupLayout = wgpuDeviceCreateBindGroupLayout(device, &bglDesc);
+    if (!_computeBindGroupLayout) {
+        CORIUM_LOG_ERROR("WebGpuComputePipeline", "Failed to create WGPUBindGroupLayout.");
+        wgpuShaderModuleRelease(computeModule);
+        shutdown();
+        return false;
+    }
 
     WGPUPipelineLayoutDescriptor plDesc{};
     plDesc.bindGroupLayoutCount = 1;
     plDesc.bindGroupLayouts = &_computeBindGroupLayout;
     WGPUPipelineLayout pipelineLayout = wgpuDeviceCreatePipelineLayout(device, &plDesc);
+    if (!pipelineLayout) {
+        CORIUM_LOG_ERROR("WebGpuComputePipeline", "Failed to create WGPUPipelineLayout.");
+        wgpuShaderModuleRelease(computeModule);
+        shutdown();
+        return false;
+    }
 
     WGPUComputePipelineDescriptor pipelineDesc{};
     pipelineDesc.layout = pipelineLayout;
@@ -153,6 +170,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     wgpuShaderModuleRelease(computeModule);
 
     _initialized = (_computePipeline != nullptr);
+    if (_initialized) {
+        CORIUM_LOG_INFO("WebGpuComputePipeline", "WGSL Compute Shader Pipeline for parallel LiDAR raycasting initialized successfully!");
+    } else {
+        CORIUM_LOG_ERROR("WebGpuComputePipeline", "Failed to compile WGSL Compute Shader Pipeline.");
+    }
     return _initialized;
 }
 
@@ -304,26 +326,37 @@ bool WebGpuComputePipeline::computeLidarRaycast(
     wgpuCommandEncoderRelease(encoder);
 
     // 6. Asynchronous Map Readback
-    struct MapContext { bool done = false; } mapCtx;
+    struct MapContext { 
+        bool done = false; 
+        WGPUBufferMapAsyncStatus status = WGPUBufferMapAsyncStatus_Unknown;
+    } mapCtx;
+
     auto mapCallback = [](WGPUBufferMapAsyncStatus status, void* userdata) {
         auto* ctx = static_cast<MapContext*>(userdata);
-        if (status == WGPUBufferMapAsyncStatus_Success && ctx) {
+        if (ctx) {
+            ctx->status = status;
             ctx->done = true;
         }
     };
 
     wgpuBufferMapAsync(_stagingBuf, WGPUMapMode_Read, 0, distBufferSize, mapCallback, &mapCtx);
     while (!mapCtx.done) {
-        wgpuDevicePoll(device, false, nullptr);
+        wgpuDevicePoll(device, true, nullptr);
     }
 
-    const float* mapped = static_cast<const float*>(wgpuBufferGetConstMappedRange(_stagingBuf, 0, distBufferSize));
-    if (mapped) {
-        std::copy(mapped, mapped + numRays, outDistances.begin());
+    if (mapCtx.status == WGPUBufferMapAsyncStatus_Success) {
+        const float* mapped = static_cast<const float*>(wgpuBufferGetConstMappedRange(_stagingBuf, 0, distBufferSize));
+        if (mapped) {
+            std::copy(mapped, mapped + numRays, outDistances.begin());
+        } else {
+            CORIUM_LOG_ERROR("WebGpuComputePipeline", "Failed to get mapped range from staging buffer.");
+        }
         wgpuBufferUnmap(_stagingBuf);
+        return mapped != nullptr;
+    } else {
+        CORIUM_LOG_ERROR("WebGpuComputePipeline", "Buffer mapping failed with status: ", mapCtx.status);
+        return false;
     }
-
-    return true;
 }
 
 void WebGpuComputePipeline::moveFrom(WebGpuComputePipeline&& rhs) noexcept

@@ -54,6 +54,7 @@ RaycastHit Raycast::castRay(
     Vec3 dirNorm = direction.normalized();
 
     for (const auto& entity : scene.entities()) {
+        if (!entity.hasPhysics) continue;
         Vec3 scaledMin{entity.localBounds.min.x * entity.scale.x, entity.localBounds.min.y * entity.scale.y, entity.localBounds.min.z * entity.scale.z};
         Vec3 scaledMax{entity.localBounds.max.x * entity.scale.x, entity.localBounds.max.y * entity.scale.y, entity.localBounds.max.z * entity.scale.z};
 
@@ -95,6 +96,7 @@ std::vector<RaycastHit> Raycast::castLidarScan(
     std::vector<CachedAABB> aabbs;
     aabbs.reserve(entities.size());
     for (const auto& entity : entities) {
+        if (!entity.hasPhysics) continue;
         Vec3 sMin{entity.localBounds.min.x * entity.scale.x,
                   entity.localBounds.min.y * entity.scale.y,
                   entity.localBounds.min.z * entity.scale.z};

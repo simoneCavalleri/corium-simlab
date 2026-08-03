@@ -51,22 +51,42 @@ WebGpuRenderPipeline& WebGpuRenderPipeline::operator=(WebGpuRenderPipeline&& rhs
 
 bool WebGpuRenderPipeline::initialize(WGPUDevice device, WGPUQueue queue, WGPUTextureFormat surfaceFormat) noexcept
 {
-    if (!device || !queue) return false;
+    if (!device || !queue) {
+        CORIUM_LOG_ERROR("WebGpuRenderPipeline", "Invalid device or queue handle during initialization.");
+        return false;
+    }
     shutdown();
 
     _device = device;
+    CORIUM_LOG_INFO("WebGpuRenderPipeline", "Initializing 3D PBR Render Pass & Shader Pipelines...");
     createPipelineLayout(device);
+    if (!_bindGroupLayout || !_pipelineLayout) {
+        CORIUM_LOG_ERROR("WebGpuRenderPipeline", "Failed to create bind group layout or pipeline layout.");
+        shutdown();
+        return false;
+    }
+
     createRenderPipeline(device, surfaceFormat);
 
+    _defaultWhiteTex = Texture::createSolidColor(device, queue, 255, 255, 255, 255);
     _defaultCheckerTex = Texture::createCheckerboard(device, queue, 256, 256, 32);
     _defaultGridTex = Texture::createGridPattern(device, queue, 512, 512);
 
     _initialized = (_pipeline != nullptr);
+    if (_initialized) {
+        CORIUM_LOG_INFO("WebGpuRenderPipeline", "3D PBR Render Pipeline initialized successfully! (Format=", surfaceFormat, ")");
+    } else {
+        CORIUM_LOG_ERROR("WebGpuRenderPipeline", "Failed to create WGPURenderPipeline.");
+        shutdown();
+    }
     return _initialized;
 }
 
 void WebGpuRenderPipeline::shutdown() noexcept
 {
+    if (!_initialized && !_pipeline) return;
+
+    _defaultWhiteTex.destroy();
     _defaultCheckerTex.destroy();
     _defaultGridTex.destroy();
 
@@ -78,6 +98,7 @@ void WebGpuRenderPipeline::shutdown() noexcept
     safeRelease<WGPUBindGroupLayout, wgpuBindGroupLayoutRelease>(_bindGroupLayout);
 
     _initialized = false;
+    CORIUM_LOG_INFO("WebGpuRenderPipeline", "3D Render Pipeline shut down cleanly.");
 }
 
 bool WebGpuRenderPipeline::beginFrame(
@@ -95,8 +116,9 @@ bool WebGpuRenderPipeline::beginFrame(
     _currentUbo.model = math::Mat4::identity();
     _currentUbo.viewProj = camera.getViewProjectionMatrix();
     _currentUbo.cameraPos = math::Vec4{ camera.getPosition().x, camera.getPosition().y, camera.getPosition().z, 1.0f };
-    _currentUbo.lightDir = math::Vec4{ 0.577f, 0.800f, 0.577f, 0.0f };
-    _currentUbo.lightColor = math::Vec4{ 1.0f, 0.98f, 0.94f, 1.0f };
+    _currentUbo.lightDir = math::Vec4{ 0.577f, 0.707f, 0.408f, 0.0f };
+    _currentUbo.lightColor = math::Vec4{ 1.0f, 0.98f, 0.92f, 1.0f };
+    _currentUbo.ambientColor = math::Vec4{ 0.15f, 0.18f, 0.22f, 1.0f };
     _currentUbo.time = time;
 
     _currentUboIndex = 0;
@@ -152,6 +174,58 @@ bool WebGpuRenderPipeline::beginFrame(
     return true;
 }
 
+bool WebGpuRenderPipeline::beginOffscreenFrame(
+    WGPUDevice device,
+    WGPUQueue queue,
+    WGPUTextureView colorTextureView,
+    WGPUTextureView depthTextureView,
+    const Camera& camera,
+    WGPUColor clearColor,
+    float time
+) noexcept
+{
+    if (!device || !queue || !colorTextureView || !depthTextureView || !_pipeline) return false;
+
+    _currentUbo.model = math::Mat4::identity();
+    _currentUbo.viewProj = camera.getViewProjectionMatrix();
+    _currentUbo.cameraPos = math::Vec4{ camera.getPosition().x, camera.getPosition().y, camera.getPosition().z, 1.0f };
+    _currentUbo.lightDir = math::Vec4{ 0.577f, 0.707f, 0.408f, 0.0f };
+    _currentUbo.lightColor = math::Vec4{ 1.0f, 0.98f, 0.92f, 1.0f };
+    _currentUbo.ambientColor = math::Vec4{ 0.15f, 0.18f, 0.22f, 1.0f };
+    _currentUbo.time = time;
+
+    _currentUboIndex = 0;
+    _inFrame = true;
+
+    WGPUCommandEncoderDescriptor encoderDesc{};
+    _currentEncoder = wgpuDeviceCreateCommandEncoder(device, &encoderDesc);
+
+    WGPURenderPassColorAttachment colorAttachment{};
+    colorAttachment.view = colorTextureView;
+    colorAttachment.loadOp = WGPULoadOp_Clear;
+    colorAttachment.storeOp = WGPUStoreOp_Store;
+    colorAttachment.clearValue = clearColor;
+
+    WGPURenderPassDepthStencilAttachment depthAttachment{};
+    depthAttachment.view = depthTextureView;
+    depthAttachment.depthClearValue = 1.0f;
+    depthAttachment.depthLoadOp = WGPULoadOp_Clear;
+    depthAttachment.depthStoreOp = WGPUStoreOp_Store;
+    depthAttachment.stencilClearValue = 0;
+    depthAttachment.stencilLoadOp = WGPULoadOp_Undefined;
+    depthAttachment.stencilStoreOp = WGPUStoreOp_Undefined;
+
+    WGPURenderPassDescriptor passDesc{};
+    passDesc.colorAttachmentCount = 1;
+    passDesc.colorAttachments = &colorAttachment;
+    passDesc.depthStencilAttachment = &depthAttachment;
+
+    _currentPass = wgpuCommandEncoderBeginRenderPass(_currentEncoder, &passDesc);
+    wgpuRenderPassEncoderSetPipeline(_currentPass, _pipeline);
+
+    return true;
+}
+
 void WebGpuRenderPipeline::drawMesh(
     WGPUQueue queue,
     const Mesh& mesh,
@@ -169,7 +243,7 @@ void WebGpuRenderPipeline::drawMesh(
     WGPUBuffer ubo = getOrCreateUboBuffer(_device, _currentUboIndex);
     wgpuQueueWriteBuffer(queue, ubo, 0, &_currentUbo, sizeof(UniformBufferObject));
 
-    const auto& tex = texture.isValid() ? texture : _defaultCheckerTex;
+    const auto& tex = texture.isValid() ? texture : _defaultWhiteTex;
     WGPUBindGroup bindGroup = getOrCreateBindGroup(_device, _currentUboIndex, tex, ubo);
     _currentUboIndex++;
 
@@ -202,6 +276,23 @@ void WebGpuRenderPipeline::endFrame(WGPUQueue queue, WGPUSurface surface) noexce
     _inFrame = false;
 }
 
+void WebGpuRenderPipeline::endOffscreenFrame(WGPUQueue queue) noexcept
+{
+    if (!_inFrame || !_currentPass || !_currentEncoder) return;
+
+    wgpuRenderPassEncoderEnd(_currentPass);
+    safeRelease<WGPURenderPassEncoder, wgpuRenderPassEncoderRelease>(_currentPass);
+
+    WGPUCommandBufferDescriptor cmdBufferDesc{};
+    WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(_currentEncoder, &cmdBufferDesc);
+    wgpuQueueSubmit(queue, 1, &cmdBuffer);
+
+    safeRelease<WGPUCommandBuffer, wgpuCommandBufferRelease>(cmdBuffer);
+    safeRelease<WGPUCommandEncoder, wgpuCommandEncoderRelease>(_currentEncoder);
+
+    _inFrame = false;
+}
+
 void WebGpuRenderPipeline::createPipelineLayout(WGPUDevice device) noexcept
 {
     WGPUBindGroupLayoutEntry entries[3]{};
@@ -226,11 +317,18 @@ void WebGpuRenderPipeline::createPipelineLayout(WGPUDevice device) noexcept
     bindGroupLayoutDesc.entryCount = 3;
     bindGroupLayoutDesc.entries = entries;
     _bindGroupLayout = wgpuDeviceCreateBindGroupLayout(device, &bindGroupLayoutDesc);
+    if (!_bindGroupLayout) {
+        CORIUM_LOG_ERROR("WebGpuRenderPipeline", "Failed to create WGPUBindGroupLayout.");
+        return;
+    }
 
     WGPUPipelineLayoutDescriptor pipelineLayoutDesc{};
     pipelineLayoutDesc.bindGroupLayoutCount = 1;
     pipelineLayoutDesc.bindGroupLayouts = &_bindGroupLayout;
     _pipelineLayout = wgpuDeviceCreatePipelineLayout(device, &pipelineLayoutDesc);
+    if (!_pipelineLayout) {
+        CORIUM_LOG_ERROR("WebGpuRenderPipeline", "Failed to create WGPUPipelineLayout.");
+    }
 }
 
 void WebGpuRenderPipeline::createRenderPipeline(WGPUDevice device, WGPUTextureFormat surfaceFormat) noexcept
@@ -242,6 +340,10 @@ void WebGpuRenderPipeline::createRenderPipeline(WGPUDevice device, WGPUTextureFo
     WGPUShaderModuleDescriptor shaderDesc{};
     shaderDesc.nextInChain = &wgslDesc.chain;
     WGPUShaderModule shaderModule = wgpuDeviceCreateShaderModule(device, &shaderDesc);
+    if (!shaderModule) {
+        CORIUM_LOG_ERROR("WebGpuRenderPipeline", "Failed to create WGSL Shader Module for 3D PBR shader.");
+        return;
+    }
 
     WGPUVertexAttribute attributes[4]{};
     attributes[0].format = WGPUVertexFormat_Float32x3;
@@ -312,6 +414,9 @@ void WebGpuRenderPipeline::createRenderPipeline(WGPUDevice device, WGPUTextureFo
     pipelineDesc.depthStencil = &depthState;
 
     _pipeline = wgpuDeviceCreateRenderPipeline(device, &pipelineDesc);
+    if (!_pipeline) {
+        CORIUM_LOG_ERROR("WebGpuRenderPipeline", "Failed to create WGPURenderPipeline.");
+    }
     wgpuShaderModuleRelease(shaderModule);
 }
 
@@ -349,7 +454,7 @@ WGPUBuffer WebGpuRenderPipeline::getOrCreateUboBuffer(WGPUDevice device, size_t 
 
 WGPUBindGroup WebGpuRenderPipeline::getOrCreateBindGroup(WGPUDevice device, size_t index, const Texture& texture, WGPUBuffer uboBuffer) noexcept
 {
-    const Texture& texToUse = texture.isValid() ? texture : _defaultCheckerTex;
+    const Texture& texToUse = texture.isValid() ? texture : _defaultWhiteTex;
     WGPUTextureView texView = texToUse.view();
     WGPUSampler texSampler = texToUse.sampler();
 

@@ -43,6 +43,16 @@ public:
         float time = 0.0f
     ) noexcept;
 
+    bool beginOffscreenFrame(
+        WGPUDevice device,
+        WGPUQueue queue,
+        WGPUTextureView colorTextureView,
+        WGPUTextureView depthTextureView,
+        const Camera& camera,
+        WGPUColor clearColor,
+        float time = 0.0f
+    ) noexcept;
+
     void drawMesh(
         WGPUQueue queue,
         const Mesh& mesh,
@@ -52,8 +62,10 @@ public:
     ) noexcept;
 
     void endFrame(WGPUQueue queue, WGPUSurface surface = nullptr) noexcept;
+    void endOffscreenFrame(WGPUQueue queue) noexcept;
 
     [[nodiscard]] bool inFrame() const noexcept { return _inFrame; }
+    [[nodiscard]] const Texture& defaultWhiteTexture() const noexcept { return _defaultWhiteTex; }
     [[nodiscard]] const Texture& defaultCheckerTexture() const noexcept { return _defaultCheckerTex; }
     [[nodiscard]] const Texture& defaultGridTexture() const noexcept { return _defaultGridTex; }
 
@@ -86,6 +98,7 @@ private:
     WGPUTexture _currentSurfaceTexture = nullptr;
     WGPUTextureView _currentColorView = nullptr;
 
+    Texture _defaultWhiteTex{};
     Texture _defaultCheckerTex{};
     Texture _defaultGridTex{};
     UniformBufferObject _currentUbo{};

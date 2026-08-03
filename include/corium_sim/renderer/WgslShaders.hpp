@@ -87,10 +87,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let L = normalize(ubo.lightDir.xyz);
     let H = normalize(V + L);
 
+    let NdotV = max(dot(N, V), 0.0001);
+    let NdotL = max(dot(N, L), 0.0);
+
     let texColor = textureSample(textureData, textureSampler, in.uv);
     let albedo = in.color.rgb * ubo.albedoColor.rgb * texColor.rgb;
     let metallic = clamp(ubo.materialParams.x, 0.0, 1.0);
-    let roughness = clamp(ubo.materialParams.y, 0.05, 1.0);
+    let roughness = clamp(ubo.materialParams.y, 0.08, 1.0);
     let emissive = ubo.materialParams.z;
 
     var F0 = vec3<f32>(0.04);
@@ -102,27 +105,24 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let F = fresnelSchlick(max(dot(H, V), 0.0), F0);
 
     let numerator = NDF * G * F;
-    let denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
-    let specular = numerator / denominator;
+    let denominator = max(4.0 * NdotV * NdotL, 0.001);
+    let specular = clamp(numerator / denominator, vec3<f32>(0.0), vec3<f32>(1.0));
 
     let kS = F;
     var kD = vec3<f32>(1.0) - kS;
     kD *= 1.0 - metallic;
 
-    let NdotL = max(dot(N, L), 0.0);
     let radiance = ubo.lightColor.rgb;
-
     let Lo = (kD * albedo / PI + specular) * radiance * NdotL;
     let ambient = ubo.ambientColor.rgb * albedo;
     let emissiveCol = albedo * emissive;
 
     let color = ambient + Lo + emissiveCol;
 
-    // Tone mapping and gamma correction
+    // Reinhard Tone mapping (linear space output, hardware will apply sRGB gamma)
     let mapped = color / (color + vec3<f32>(1.0));
-    let finalColor = pow(mapped, vec3<f32>(1.0 / 2.2));
 
-    return vec4<f32>(finalColor, in.color.a * texColor.a * ubo.albedoColor.a);
+    return vec4<f32>(mapped, in.color.a * texColor.a * ubo.albedoColor.a);
 }
 )";
 
