@@ -20,7 +20,7 @@ def main():
     print(" Corium SimLab Sample #06: Vectorized Parallel Environments (VectorEnv)")
     print("=========================================================================\n")
 
-    num_parallel_envs = 8
+    num_parallel_envs = 4
     print(f"[Python Sample] Initializing VectorEnv with {num_parallel_envs} parallel 3D simulation instances...")
 
     vec_env = VectorEnv(num_envs=num_parallel_envs)
@@ -30,7 +30,7 @@ def main():
     print(f"  - Environment #1 Observation:     {batched_obs[0]}")
 
     # Execute 50 parallel batch steps
-    print("\n[Python Sample] Running 50 Batch Simulation Steps across all 8 parallel environments...")
+    print(f"\n[Python Sample] Running 50 Batch Simulation Steps across all {num_parallel_envs} parallel environments...")
     for step in range(1, 51):
         # Generate random batch actions for 8 environments
         batch_actions = [

@@ -5,7 +5,6 @@
 // =============================================================================
 
 #include "corium_sim/environment/DomainRandomizer.hpp"
-#include "corium_sim/environment/MultiAgentEnvironment.hpp"
 #include "corium_sim/environment/ParallelEnvironmentPool.hpp"
 #include "corium_sim/environment/RewardBuilder.hpp"
 #include "corium_sim/environment/SimEnvironment.hpp"
