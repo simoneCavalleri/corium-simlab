@@ -5,6 +5,7 @@
 #include "corium_sim/SimLab.hpp"
 #include "corium_sim/scene/SceneBuilder.hpp"
 #include <iostream>
+#include <cmath>
 
 using namespace corium_sim;
 using namespace corium_sim::math;
@@ -19,7 +20,7 @@ int main(int argc, char** argv)
 
     std::cout << "=========================================================\n";
     std::cout << " Corium SimLab Sample #02: Industrial Robotic Manipulator Workstation\n";
-    std::cout << " Features: 3D WebGPU Graphics | URDF Robot Loading | Inverse Kinematics\n";
+    std::cout << " Features: 3D WebGPU Graphics | URDF Robot Loading | Dynamic Arm Motion\n";
     std::cout << "=========================================================\n\n";
 
     SimRuntime runtime;
@@ -109,9 +110,29 @@ int main(int argc, char** argv)
         .build();
 
     app.setScene(std::move(envScene));
-    std::cout << "[3D Scene] Industrial Workstation & URDF Robotic Arm Loaded Successfully!\n";
 
+    // Register 3D dynamic joint motion callback for robotic arm manipulation
+    app.onStep([](SimLabApp& appInstance, float dt) {
+        static float simTime = 0.0f;
+        simTime += dt;
+
+        if (auto* jBase = appInstance.scene().findJoint("joint_base")) {
+            jBase->position = std::sin(simTime * 1.2f) * 0.9f;
+        }
+        if (auto* jShoulder = appInstance.scene().findJoint("joint_shoulder")) {
+            jShoulder->position = std::cos(simTime * 1.8f) * 0.4f;
+        }
+        if (auto* jElbow = appInstance.scene().findJoint("joint_elbow")) {
+            jElbow->position = std::sin(simTime * 2.2f) * 0.5f;
+        }
+
+
+        appInstance.physics().step(appInstance.scene(), dt);
+    });
+
+    std::cout << "[3D Scene] Industrial Workstation & URDF Robotic Arm Loaded Successfully!\n";
     std::cout << "[Step 3] Launching 3D Interactive WebGPU Graphics Window...\n";
+
     app.run(runtime);
 
     runtime.shutdown();

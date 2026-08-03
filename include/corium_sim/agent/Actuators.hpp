@@ -65,10 +65,12 @@ public:
         float linearVel = action[0];
         float angularVel = action[1]; // deg/sec
 
-        // Update linear and angular velocities of physical body
-        entity.velocity.z = linearVel;
+        float yawRad = entity.rotation.y * math::DEG2RAD;
+        entity.velocity.x = std::sin(yawRad) * linearVel;
+        entity.velocity.z = std::cos(yawRad) * linearVel;
         entity.angularVelocity.y = angularVel;
     }
+
 };
 
 } // namespace corium_sim::agent::actuators

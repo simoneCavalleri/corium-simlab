@@ -16,7 +16,9 @@ SceneBuilder& SceneBuilder::addGroundGrid(float width, float depth, uint32_t sub
     SimEntity entity{};
     entity.id = _nextEntityId++;
     entity.name = "ground_grid";
+    entity.shape = EntityShape::PlaneGrid;
     if (_device && _queue) {
+
         entity.mesh = renderer::Mesh::createPlane(_device, _queue, width, depth, subdivisions);
         entity.texture = renderer::Texture::createGridPattern(_device, _queue, 512, 512);
     }

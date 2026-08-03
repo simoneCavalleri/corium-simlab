@@ -54,11 +54,27 @@ public:
         auto obs = _agent.observe(_env.scene());
         auto action = _policy.plan(obs);
         _agent.actuate(action);
+
+        if (auto* sceneEntity = _env.scene().findEntity(_agent.body().name)) {
+            sceneEntity->velocity = _agent.body().velocity;
+            sceneEntity->angularVelocity = _agent.body().angularVelocity;
+            sceneEntity->position = _agent.body().position;
+            sceneEntity->rotation = _agent.body().rotation;
+        }
+
         _env.step(dt);
+
+        if (auto* sceneEntity = _env.scene().findEntity(_agent.body().name)) {
+            _agent.body().position = sceneEntity->position;
+            _agent.body().rotation = sceneEntity->rotation;
+            _agent.body().velocity = sceneEntity->velocity;
+            _agent.body().angularVelocity = sceneEntity->angularVelocity;
+        }
 
         math::Vec3 targetPos{4.0f, 0.75f, -2.0f};
         return _rewardEngine.computeTotalReward(_agent.body().position, targetPos, action);
     }
+
 
 private:
     environment::SimEnvironment<PhysicsEngineType> _env;
