@@ -16,15 +16,25 @@ namespace corium_sim::environment {
 template <physics::PhysicsBackend PhysicsEngineType = physics::PhysicsEngine>
 class SimEnvironment {
 public:
-    SimEnvironment() = default;
+    SimEnvironment()
+        : _scene(std::make_shared<scene::SimScene>()) {}
 
     explicit SimEnvironment(scene::SimScene scene, PhysicsEngineType physicsEngine = {})
-        : _scene(std::move(scene)), _physicsEngine(std::move(physicsEngine)) {}
+        : _scene(std::make_shared<scene::SimScene>(std::move(scene))), _physicsEngine(std::move(physicsEngine)) {}
+
+    explicit SimEnvironment(std::shared_ptr<scene::SimScene> scene, PhysicsEngineType physicsEngine = {})
+        : _scene(std::move(scene)), _physicsEngine(std::move(physicsEngine)) {
+        if (!_scene) {
+            _scene = std::make_shared<scene::SimScene>();
+        }
+    }
 
     /// @brief Advance the physical simulation by dt seconds using pluggable physics engine.
     void step(float dt = 0.01667f) noexcept
     {
-        _physicsEngine.step(_scene, dt);
+        if (_scene) {
+            _physicsEngine.step(*_scene, dt);
+        }
         _currentStep++;
         _elapsedTime += dt;
     }
@@ -55,8 +65,9 @@ public:
         return TaskStepResult{};
     }
 
-    [[nodiscard]] scene::SimScene& scene() noexcept { return _scene; }
-    [[nodiscard]] const scene::SimScene& scene() const noexcept { return _scene; }
+    [[nodiscard]] std::shared_ptr<scene::SimScene> scenePtr() const noexcept { return _scene; }
+    [[nodiscard]] scene::SimScene& scene() noexcept { return *_scene; }
+    [[nodiscard]] const scene::SimScene& scene() const noexcept { return *_scene; }
 
     [[nodiscard]] PhysicsEngineType& physics() noexcept { return _physicsEngine; }
     [[nodiscard]] const PhysicsEngineType& physics() const noexcept { return _physicsEngine; }
@@ -65,7 +76,7 @@ public:
     [[nodiscard]] float elapsedTime() const noexcept { return _elapsedTime; }
 
 private:
-    scene::SimScene _scene{};
+    std::shared_ptr<scene::SimScene> _scene;
     PhysicsEngineType _physicsEngine{};
     std::shared_ptr<ITask> _task{nullptr};
 

@@ -37,6 +37,7 @@ public:
 
     [[nodiscard]] environment::SimEnvironment<PhysicsEngineType>& env() noexcept { return _env; }
     [[nodiscard]] const environment::SimEnvironment<PhysicsEngineType>& env() const noexcept { return _env; }
+    [[nodiscard]] std::shared_ptr<scene::SimScene> scenePtr() const noexcept { return _env.scenePtr(); }
 
     [[nodiscard]] AgentType& agent() noexcept { return _agent; }
     [[nodiscard]] const AgentType& agent() const noexcept { return _agent; }
@@ -51,23 +52,18 @@ public:
     /// @return Scalar reward computed from reward policy.
     float step(float dt = 0.01667f) noexcept
     {
-        return step(_env.scene(), dt);
-    }
-
-    float step(scene::SimScene& activeScene, float dt = 0.01667f) noexcept
-    {
-        auto obs = _agent.observe(activeScene);
+        auto obs = _agent.observe(_env.scene());
         auto action = _policy.plan(obs);
         _agent.actuate(action);
 
-        if (auto* sceneEntity = activeScene.findEntity(_agent.body().name)) {
+        if (auto* sceneEntity = _env.scene().findEntity(_agent.body().name)) {
             sceneEntity->velocity = _agent.body().velocity;
             sceneEntity->angularVelocity = _agent.body().angularVelocity;
         }
 
-        _env.physics().step(activeScene, dt);
+        _env.step(dt);
 
-        if (auto* sceneEntity = activeScene.findEntity(_agent.body().name)) {
+        if (auto* sceneEntity = _env.scene().findEntity(_agent.body().name)) {
             _agent.body().position = sceneEntity->position;
             _agent.body().rotation = sceneEntity->rotation;
             _agent.body().velocity = sceneEntity->velocity;
@@ -77,6 +73,7 @@ public:
         math::Vec3 targetPos{4.0f, 0.75f, -2.0f};
         return _rewardEngine.computeTotalReward(_agent.body().position, targetPos, action);
     }
+
 
 
 

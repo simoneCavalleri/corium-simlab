@@ -40,7 +40,8 @@ public:
     void onRender(double deltaTime);
     void onShutdown();
 
-    /// @brief Set active 3D simulation scene.
+    /// @brief Set active 3D simulation scene (shared_ptr or move value).
+    void setScene(std::shared_ptr<scene::SimScene> scene) noexcept;
     void setScene(scene::SimScene scene) noexcept;
 
     /// @brief Reset simulation environment state.
@@ -57,8 +58,9 @@ public:
     [[nodiscard]] renderer::Camera& camera() noexcept { return _camera; }
     [[nodiscard]] const renderer::Camera& camera() const noexcept { return _camera; }
     [[nodiscard]] renderer::SensorCamera& sensorCamera() noexcept { return _sensorCamera; }
-    [[nodiscard]] scene::SimScene& scene() noexcept { return _scene; }
-    [[nodiscard]] const scene::SimScene& scene() const noexcept { return _scene; }
+    [[nodiscard]] std::shared_ptr<scene::SimScene> scenePtr() const noexcept { return _scene; }
+    [[nodiscard]] scene::SimScene& scene() noexcept { return *_scene; }
+    [[nodiscard]] const scene::SimScene& scene() const noexcept { return *_scene; }
     [[nodiscard]] physics::PhysicsEngine& physics() noexcept { return _physicsEngine; }
     [[nodiscard]] kinematics::JointKinematics& jointKinematics() noexcept { return _jointKinematics; }
 
@@ -70,7 +72,7 @@ private:
     renderer::WebGpuBackend _gpuBackend{};
     renderer::Camera _camera{};
     renderer::SensorCamera _sensorCamera{128, 128, 75.0f};
-    scene::SimScene _scene{};
+    std::shared_ptr<scene::SimScene> _scene;
     physics::PhysicsEngine _physicsEngine{};
     kinematics::JointKinematics _jointKinematics{};
     SimConfig _config{};

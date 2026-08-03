@@ -7,7 +7,8 @@ namespace corium_sim {
 using namespace math;
 
 SimLabApp::SimLabApp()
-    : BaseApp({ .title = "Corium SimLab — Physical Agent Incubator & Simulation Engine", .width = 1280, .height = 720, .noApi = true })
+    : BaseApp({ .title = "Corium SimLab — Physical Agent Incubator & Simulation Engine", .width = 1280, .height = 720, .noApi = true }),
+      _scene(std::make_shared<scene::SimScene>())
 {}
 
 SimLabApp::~SimLabApp() = default;
@@ -76,8 +77,8 @@ void SimLabApp::onInitialize()
     WGPUDevice device = _gpuBackend.device();
     WGPUQueue queue = _gpuBackend.queue();
 
-    if (device && queue) {
-        for (auto& entity : _scene.entities()) {
+    if (device && queue && _scene) {
+        for (auto& entity : _scene->entities()) {
             if (!entity.mesh.isValid()) {
                 switch (entity.shape) {
                     case scene::EntityShape::PlaneGrid:
@@ -107,8 +108,56 @@ void SimLabApp::onInitialize()
                 }
             }
         }
-        if (_scene.entityCount() > 0) {
-            renderer::BoundingBox bounds = _scene.sceneBounds();
+        if (_scene->entityCount() > 0) {
+            renderer::BoundingBox bounds = _scene->sceneBounds();
+            _camera.focusOnBounds(bounds.min, bounds.max);
+        }
+    }
+}
+
+void SimLabApp::setScene(std::shared_ptr<scene::SimScene> scene) noexcept
+{
+    if (scene) {
+        _scene = std::move(scene);
+    } else {
+        _scene = std::make_shared<scene::SimScene>();
+    }
+
+    WGPUDevice device = _gpuBackend.device();
+    WGPUQueue queue = _gpuBackend.queue();
+    if (device && queue && _scene) {
+        for (auto& entity : _scene->entities()) {
+            if (!entity.mesh.isValid()) {
+                switch (entity.shape) {
+                    case scene::EntityShape::PlaneGrid:
+                        entity.mesh = renderer::Mesh::createPlane(device, queue, 60.0f, 60.0f, 60);
+                        entity.texture = renderer::Texture::createGridPattern(device, queue, 512, 512);
+                        if (entity.material.albedo.x == 0.8f && entity.material.albedo.y == 0.8f && entity.material.albedo.z == 0.8f) {
+                            entity.material = renderer::Material::Matte({0.3f, 0.35f, 0.40f, 1.0f});
+                        }
+                        entity.localBounds = renderer::BoundingBox{{-30.0f, 0.0f, -30.0f}, {30.0f, 0.0f, 30.0f}};
+                        break;
+                    case scene::EntityShape::Sphere:
+                        entity.mesh = renderer::Mesh::createSphere(device, queue, 0.5f, 16);
+                        entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                        break;
+                    case scene::EntityShape::Cylinder:
+                        entity.mesh = renderer::Mesh::createCylinder(device, queue, 0.5f, 1.0f, 16);
+                        entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                        break;
+                    case scene::EntityShape::Cube:
+                    default:
+                        entity.mesh = renderer::Mesh::createCube(device, queue, 1.0f);
+                        entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
+                        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
+                        break;
+                }
+            }
+        }
+        if (_scene->entityCount() > 0) {
+            renderer::BoundingBox bounds = _scene->sceneBounds();
             _camera.focusOnBounds(bounds.min, bounds.max);
         }
     }
@@ -116,49 +165,8 @@ void SimLabApp::onInitialize()
 
 void SimLabApp::setScene(scene::SimScene scene) noexcept
 {
-    _scene = std::move(scene);
-
-    WGPUDevice device = _gpuBackend.device();
-    WGPUQueue queue = _gpuBackend.queue();
-    if (device && queue) {
-        for (auto& entity : _scene.entities()) {
-            if (!entity.mesh.isValid()) {
-                switch (entity.shape) {
-                    case scene::EntityShape::PlaneGrid:
-                        entity.mesh = renderer::Mesh::createPlane(device, queue, 60.0f, 60.0f, 60);
-                        entity.texture = renderer::Texture::createGridPattern(device, queue, 512, 512);
-                        if (entity.material.albedo.x == 0.8f && entity.material.albedo.y == 0.8f && entity.material.albedo.z == 0.8f) {
-                            entity.material = renderer::Material::Matte({0.3f, 0.35f, 0.40f, 1.0f});
-                        }
-                        entity.localBounds = renderer::BoundingBox{{-30.0f, 0.0f, -30.0f}, {30.0f, 0.0f, 30.0f}};
-                        break;
-                    case scene::EntityShape::Sphere:
-                        entity.mesh = renderer::Mesh::createSphere(device, queue, 0.5f, 16);
-                        entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
-                        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
-                        break;
-                    case scene::EntityShape::Cylinder:
-                        entity.mesh = renderer::Mesh::createCylinder(device, queue, 0.5f, 1.0f, 16);
-                        entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
-                        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
-                        break;
-                    case scene::EntityShape::Cube:
-                    default:
-                        entity.mesh = renderer::Mesh::createCube(device, queue, 1.0f);
-                        entity.texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32);
-                        entity.localBounds = renderer::BoundingBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}};
-                        break;
-                }
-            }
-        }
-        if (_scene.entityCount() > 0) {
-            renderer::BoundingBox bounds = _scene.sceneBounds();
-            _camera.focusOnBounds(bounds.min, bounds.max);
-        }
-    }
+    setScene(std::make_shared<scene::SimScene>(std::move(scene)));
 }
-
-
 
 void SimLabApp::resetEnvironment() noexcept
 {
@@ -170,11 +178,11 @@ bool SimLabApp::loadSceneMesh(const std::string& filePath)
 {
     WGPUDevice device = _gpuBackend.device();
     WGPUQueue queue = _gpuBackend.queue();
-    if (!device || !queue) return false;
+    if (!device || !queue || !_scene) return false;
 
-    _scene.addEntity(
+    _scene->addEntity(
         scene::SimEntity{
-            .id = static_cast<uint32_t>(_scene.entityCount() + 1),
+            .id = static_cast<uint32_t>(_scene->entityCount() + 1),
             .name = filePath,
             .mesh = renderer::Mesh::createFromOBJ(device, queue, filePath),
             .texture = renderer::Texture::createCheckerboard(device, queue, 256, 256, 32),
@@ -191,16 +199,18 @@ void SimLabApp::onRender(double deltaTime)
 
     if (_stepCallback) {
         _stepCallback(*this, dt);
-    } else {
-        _physicsEngine.step(_scene, dt);
+    } else if (_scene) {
+        _physicsEngine.step(*_scene, dt);
     }
-    _jointKinematics.updateKinematics(_scene, dt);
+    if (_scene) {
+        _jointKinematics.updateKinematics(*_scene, dt);
+    }
     _simStepCount++;
 
     _camera.update(dt);
 
-    if (_gpuBackend.beginFrame(_camera)) {
-        for (const auto& entity : _scene.entities()) {
+    if (_gpuBackend.beginFrame(_camera) && _scene) {
+        for (const auto& entity : _scene->entities()) {
             if (entity.mesh.isValid()) {
                 _gpuBackend.drawMesh(entity.mesh, entity.texture, entity.transformMatrix(), entity.material);
             }
@@ -211,7 +221,9 @@ void SimLabApp::onRender(double deltaTime)
 
 void SimLabApp::onShutdown()
 {
-    _scene.destroy();
+    if (_scene) {
+        _scene->destroy();
+    }
     _gpuBackend.shutdown();
 
     CORIUM_LOG_INFO("SimLab", "Application Shutdown Summary:");

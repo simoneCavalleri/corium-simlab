@@ -139,11 +139,12 @@ int main(int argc, char** argv)
     auto incubatorPtr = std::make_shared<decltype(incubator)>(std::move(incubator));
 
     // Attach incubator step callback to generic SimLabApp
-    app.onStep([incubatorPtr](SimLabApp& appInstance, float dt) {
-        incubatorPtr->step(appInstance.scene(), dt);
+    app.onStep([incubatorPtr](SimLabApp&, float dt) {
+        incubatorPtr->step(dt);
     });
 
-    app.setScene(std::move(incubatorPtr->env().scene()));
+    app.setScene(incubatorPtr->scenePtr());
+
 
 
 
