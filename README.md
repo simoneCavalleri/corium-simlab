@@ -6,133 +6,128 @@
 [![Python: Gymnasium](https://img.shields.io/badge/Python-Gymnasium-brightgreen.svg)](python/)
 [![Graphics: WebGPU](https://img.shields.io/badge/Graphics-WebGPU%20WGSL-orange.svg)](src/renderer/)
 
-**Corium SimLab** is a high-performance 3D agent simulation environment and WebGPU real-time rendering engine built on top of the [Corium](https://github.com/simoneCavalleri/corium) zero-heap MPSC event-driven architecture.
+**Corium SimLab** is a high-performance **C++20 Physical Agent Incubator & Simulation Framework** built on top of the zero-heap [Corium](https://github.com/simoneCavalleri/corium) MPSC event-driven architecture and real-time WebGPU rendering engine.
 
-Designed for Reinforcement Learning (RL), digital twins, industrial robotic manipulators, autonomous agents, and high-frequency spatial vision sensors.
+Designed for Embodied AI, Reinforcement Learning (RL), mobile robots, manipulators, spatial vision sensors, and high-frequency digital twins.
 
 ---
 
-## Key Features & Highlights
+## 🏛️ Physical Agent Incubator Paradigm
 
-- **PBR Cook-Torrance WGSL Shading**: Physically Based Rendering (GGX microfacet BRDF) with metallic, roughness, albedo, and emissive material parameters.
+Corium SimLab is structured around the **Physical Agent — Environment** feedback loop:
+
+```text
+ ┌──────────────────────────────────────────────────────────┐
+ │                   SimEnvironment                         │
+ │  (World Physics, Terrains, Tasks, Reward, Reset)         │
+ └─────────────┬──────────────────────────────▲─────────────┘
+               │                              │
+     Physical State & Vision                Actions (Torque, Vel, Pos)
+               │                              │
+ ┌─────────────▼──────────────┐    ┌──────────┴─────────────┐
+ │     Perception / Sensors   │    │    Actuator System     │
+ │ (LiDAR, Camera, IMU, Joint)│    │  (Motors, Grippers)    │
+ └─────────────┬──────────────┘    └──────────▲─────────────┘
+               │                              │
+    Zero-Heap Observation Span         Action Vector Span
+               │                              │
+ ┌─────────────▼──────────────────────────────┴─────────────┐
+ │                Brain / Planner / Policy                  │
+ │    (Python PyTorch/RL, C++ IK/MPC, Trajectory Planner)   │
+ └──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚀 Key Features & Highlights
+
+- **Compile-Time Physical Agent Monomorphization (`PhysicalAgent`)**: Static C++20 agent composition eliminating virtual function dispatch (`vtable`) and dynamic heap allocations in simulation inner-loops.
+- **Zero-Allocation Sensor Suites (`SensorSuite`)**: Compile-time variadic containers aggregating multi-modal observations (3D LiDAR, IMU, Joint Encoders, RGBD cameras) into contiguous zero-copy memory arrays.
+- **Compile-Time Actuator Suites (`ActuatorSuite`)**: Zero-heap action spaces mapping normalized action vectors to joint motors, wheel drives, and physical forces.
+- **Physical Environments & Tasks (`SimEnvironment`, `ITask`)**: Modular environment wrapper holding world physics, reset dynamics, reward calculation, and step execution.
+- **PBR Cook-Torrance WGSL Rendering**: Physically Based Rendering (GGX microfacet BRDF) with metallic, roughness, albedo, and emissive materials in WebGPU.
 - **Offscreen WebGPU Vision Sensors**: 256-byte aligned staging buffer CPU readback for extracting raw RGBA visual frames for PyTorch / NumPy RL policies.
-- **Inverse Kinematics (IK Solver)**: Jacobian Transpose / Gradient Descent solver for multi-joint robotic arms (`solve_ik(end_effector, x, y, z)`).
-- **URDF XML Parser & Robot Loader**: Native parser for loading standard URDF robot specifications (`<link>`, `<joint>`, `<geometry>`, `<origin>`, `<limit>`).
-- **3D LiDAR & Ultrasonic Sensor Raycasting**: 3D Ray-AABB slab intersection engine and 360-degree LiDAR point cloud scanning returning distance, hit points, and surface normals.
-- **Vectorized Parallel Environments (`VectorEnv`)**: High-performance multi-instance manager executing $N$ 3D simulation environments in parallel for ultra-fast RL policy training.
-- **Fluent C++ SceneBuilder API**: Programmatic 3D scene construction (`.addGroundGrid()`, `.addCube()`, `.addSphere()`, `.addModel()`, `.addJoint()`, `.addURDF()`).
-- **Python Gymnasium Interface (`pybind11`)**: Native C++ extension module (`corium_sim_py`) providing standard Gymnasium `CoriumEnv` and `VectorEnv`.
+- **Vectorized Parallel Environments (`VectorEnv`)**: High-performance multi-instance manager executing $N$ 3D simulation environments in parallel for ultra-fast policy training.
+- **Python Gymnasium Interface (`pybind11`)**: Native C++ extension module (`corium_sim_py`) exposing standard Gymnasium `CoriumEnv` and vectorized environments.
 
 ---
 
-## Project Organization
+## 📁 Project Domain Organization
 
 ```text
 corium-simlab/
-├── assets/                          # 3D Mesh Models, Textures, and URDF Files
-│   ├── models/                      # sample_robot.obj 3D mesh
-│   └── urdf/                        # sample_arm.urdf XML specification
+├── assets/                          # 3D Mesh Models, Textures, and URDF Specifications
 ├── include/
 │   └── corium_sim/                  # Public C++ Engine Headers
+│       ├── agent/                   # Physical Agent Incubator (Compile-Time C++20)
+│       │   ├── ActuatorSuite.hpp    # Compile-time variadic actuator containers
+│       │   ├── Actuators.hpp        # Joint & differential drive actuators
+│       │   ├── Concepts.hpp         # C++20 Sensor, Actuator, Environment concepts
+│       │   ├── PhysicalAgent.hpp    # Monomorphized PhysicalAgent & AgentBuilder
+│       │   ├── SensorSuite.hpp      # Compile-time variadic sensor containers
+│       │   └── Sensors.hpp          # 3D LiDAR, IMU, JointEncoder sensors
+│       ├── environment/             # Simulation Environments & Training Tasks
+│       │   ├── SimEnvironment.hpp   # 3D Physical environment step/reset loop
+│       │   └── Task.hpp             # Reward, done & goal termination contract
 │       ├── kinematics/              # JointKinematics (FK & IK Solvers)
-│       ├── physics/                 # 3D Physics & Raycast LiDAR Engine
-│       ├── renderer/                # WebGPU Renderer, PBR Materials, SensorCamera, WgslShaders
+│       ├── physics/                 # 3D Physics Engine & Raycast LiDAR
+│       ├── renderer/                # WebGPU Renderer, PBR Materials, SensorCamera
 │       ├── scene/                   # SimScene, SceneBuilder & UrdfLoader
-│       ├── App.hpp                  # SimLabApp core application class
-│       └── SimLab.hpp               # Single umbrella header inclusion
+│       └── SimLab.hpp               # Master umbrella header inclusion
 ├── python/
 │   └── corium_sim/                  # Python Gymnasium & VectorEnv Package
 ├── samples/                         # Executable & Script Samples
 │   ├── cpp/
-│   │   ├── 01_basic_environment.cpp
-│   │   └── 02_robotic_arm_manipulator.cpp
+│   │   ├── 01_physical_agent_incubator.cpp   # Compile-time Physical Agent Incubator
+│   │   ├── 02_robotic_arm_manipulator.cpp    # URDF Robot arm joint control & IK
 │   └── python/
-│       ├── 01_gym_environment.py           # Gymnasium step loop
-│       ├── 02_robot_joint_control.py       # Robotic joint control & PPM camera frame
-│       ├── 03_train_rl_agent.py            # Inverse Kinematics target reach
-│       ├── 04_urdf_robot_loader.py         # URDF XML model parsing & control
-│       ├── 05_lidar_sensor_scan.py         # 3D LiDAR 360-degree point cloud scan
-│       └── 06_vectorized_environments.py  # 8 Parallel vectorized 3D environments
+│       ├── 01_gym_environment.py             # Gymnasium step loop
+│       ├── 02_robot_joint_control.py         # Joint control & offscreen rendering
+│       ├── 03_train_rl_agent.py              # IK target reach RL training
+│       ├── 04_urdf_robot_loader.py           # URDF parsing and display
+│       ├── 05_lidar_sensor_scan.py           # 3D LiDAR point cloud scan
+│       └── 06_vectorized_environments.py    # 8 Parallel vectorized environments
 ├── src/                             # C++ Core Implementations (.cpp)
-│   ├── kinematics/                  # JointKinematics.cpp (FK & IK)
-│   ├── physics/                     # PhysicsEngine.cpp & Raycast.cpp
-│   ├── python/                      # pybind11 bindings.cpp
-│   ├── renderer/                    # WebGpuBackend.cpp & WebGpuSurface.cpp
-│   └── scene/                       # SimScene.cpp, SceneBuilder.cpp & UrdfLoader.cpp
 └── CMakeLists.txt
 ```
 
 ---
 
-## Quickstart & Build Instructions
+## 💻 Quickstart & Build Instructions
 
 ### System Prerequisites (Linux)
 
-Before building, ensure the required C++20 compiler toolchain, CMake, Python 3 development headers (for Python bindings), and GLFW windowing system packages (Wayland / X11 / `xkbcommon`) are installed:
-
-- **Ubuntu / Debian**:
-  ```bash
-  sudo apt update
-  sudo apt install cmake build-essential pkg-config python3-dev libxkbcommon-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libwayland-dev wayland-protocols
-  ```
-
-- **Fedora / RHEL**:
-  ```bash
-  sudo dnf install cmake gcc-c++ pkgconf-pkg-config python3-devel libxkbcommon-devel libX11-devel libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel wayland-devel wayland-protocols-devel
-  ```
-
-- **Arch Linux**:
-  ```bash
-  sudo pacman -S cmake base-devel pkgconf python libxkbcommon libx11 libxrandr libxinerama libxcursor libxi wayland wayland-protocols
-  ```
+```bash
+# Ubuntu / Debian
+sudo apt update
+sudo apt install cmake build-essential pkg-config python3-dev libxkbcommon-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libwayland-dev wayland-protocols
+```
 
 ### C++ Samples & Library Build
 
 ```bash
-# Configure project with C++ samples and Python bindings enabled
-cmake -B build -DCORIUM_LOCAL_PATH=/home/simone/dev/corium -DBUILD_SAMPLES=ON -DBUILD_PYTHON_BINDINGS=ON
+# Configure project with C++ samples enabled
+cmake -B build -DCORIUM_LOCAL_PATH=/home/simone/dev/corium -DBUILD_SAMPLES=ON -DBUILD_PYTHON_BINDINGS=OFF
 
 # Compile library and samples
 cmake --build build
+
+# Run C++ Physical Agent Incubator Sample (Compile-Time C++20)
+./build/samples/cpp/sample_01_physical_agent_incubator
 
 # Run C++ Industrial Robotic Manipulator Sample
 ./build/samples/cpp/sample_02_robotic_arm_manipulator
 ```
 
-### Python Package Installation & CLI Tool
+### Python Package Installation & Gymnasium Training
 
 ```bash
-# Install corium-sim in editable mode
+# Install corium-sim package in editable mode
 pip install -e . --break-system-packages
 
-# Display system info and WebGPU capabilities
-corium-sim info
-
-# Preview any URDF or OBJ 3D model
-corium-sim view assets/urdf/sample_arm.urdf
-
-# Run any sample script directly (1 to 6)
-corium-sim run 5
-```
-
-### Python Gymnasium & Feature Samples
-
-```bash
-# Sample #01: Standard Gymnasium Environment Loop
+# Run Gymnasium environment sample
 python3 samples/python/01_gym_environment.py
 
-# Sample #02: Joint Kinematics Control & Sensor Image Generation
-python3 samples/python/02_robot_joint_control.py
-
-# Sample #03: Inverse Kinematics (IK) Target Tracking
-python3 samples/python/03_train_rl_agent.py
-
-# Sample #04: URDF XML Parser & Robot Specification Loader
-python3 samples/python/04_urdf_robot_loader.py
-
-# Sample #05: 3D LiDAR 360-degree Point Cloud Scanning
-python3 samples/python/05_lidar_sensor_scan.py
-
-# Sample #06: Vectorized Parallel Environments (8 Environments in Parallel)
+# Run parallel vectorized 3D environments (8 environments)
 python3 samples/python/06_vectorized_environments.py
 ```

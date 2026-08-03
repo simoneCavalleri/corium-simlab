@@ -6,7 +6,7 @@ import argparse
 def main():
     parser = argparse.ArgumentParser(
         prog="corium-sim",
-        description="Corium SimLab 3D Simulation & WebGPU Engine CLI Tool"
+        description="Corium SimLab — High-Performance Physical Agent Incubator & Simulation System CLI Tool"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available Commands")
 
@@ -28,8 +28,9 @@ def main():
 
     if args.command == "info":
         print("=========================================================================")
-        print(" Corium SimLab — High-Performance 3D Agent Simulation System")
+        print(" Corium SimLab — High-Performance Physical Agent Incubator System")
         print("=========================================================================")
+
         print(" Version:            0.2.0")
         print(" Architecture:       C++20 & WebGPU WGSL Shading Engine")
         print(" Event Runtime:      Corium MPSC Zero-Heap Architecture")

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # =============================================================================
 # Corium SimLab Sample #05 — 3D LiDAR & Proximity Sensor Point Cloud Scanning
+# Explicit User-Defined Environment Scene Construction
 # =============================================================================
 
 import sys
@@ -21,7 +22,17 @@ def main():
     print("=========================================================================\n")
 
     app = corium_sim_py.SimLabApp()
-    app.setup_default_scene()
+
+    # User explicitly constructs 3D environment scene via SceneBuilder
+    builder = app.create_scene_builder()
+    scene = (builder
+             .add_ground_grid(50.0, 50.0, 50)
+             .add_cube("agent_robot", corium_sim_py.Vec3(0.0, 0.5, 0.0), corium_sim_py.Vec3(1.0, 1.0, 1.0))
+             .add_cube("target_goal", corium_sim_py.Vec3(4.0, 0.75, -2.0), corium_sim_py.Vec3(1.2, 1.2, 1.2))
+             .add_sphere("obstacle_ball", corium_sim_py.Vec3(-3.0, 1.0, 2.0), 1.0)
+             .build())
+
+    app.set_scene(scene)
     app.reset()
 
     # 1. Single Raycast Test

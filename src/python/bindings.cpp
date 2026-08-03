@@ -12,12 +12,19 @@
 #include "corium_sim/scene/SimScene.hpp"
 #include "corium_sim/scene/UrdfLoader.hpp"
 #include "corium_sim/physics/Raycast.hpp"
+#include "corium_sim/environment/Environment.hpp"
+#include "corium_sim/environment/SimEnvironment.hpp"
+#include "corium_sim/environment/Task.hpp"
+
 
 namespace py = pybind11;
 using namespace corium_sim;
 using namespace corium_sim::math;
 using namespace corium_sim::renderer;
 using namespace corium_sim::scene;
+using namespace corium_sim::environment;
+using namespace corium_sim::physics;
+
 
 PYBIND11_MODULE(corium_sim_py, m) {
     m.doc() = "Corium SimLab — High-Performance 3D Agent Simulation & WebGPU Visualizer Engine Extension";
@@ -95,6 +102,38 @@ PYBIND11_MODULE(corium_sim_py, m) {
         .def("entity_count", &SimScene::entityCount)
         .def("destroy", &SimScene::destroy);
 
+    py::class_<SceneBuilder>(m, "SceneBuilder")
+        .def("add_ground_grid", &SceneBuilder::addGroundGrid,
+             py::arg("width") = 50.0f, py::arg("depth") = 50.0f, py::arg("subdivisions") = 50,
+             py::return_value_policy::reference)
+        .def("add_cube", &SceneBuilder::addCube,
+             py::arg("name"), py::arg("position") = Vec3{0,0,0}, py::arg("scale") = Vec3{1,1,1},
+             py::arg("rotation") = Vec3{0,0,0}, py::arg("material") = Material{},
+             py::arg("is_static") = false, py::arg("has_physics") = true,
+             py::return_value_policy::reference)
+        .def("add_sphere", &SceneBuilder::addSphere,
+             py::arg("name"), py::arg("position") = Vec3{0,0,0}, py::arg("radius") = 0.5f,
+             py::arg("scale") = Vec3{1,1,1}, py::arg("material") = Material{},
+             py::arg("is_static") = false, py::arg("has_physics") = true,
+             py::return_value_policy::reference)
+        .def("add_model", &SceneBuilder::addModel,
+             py::arg("name"), py::arg("obj_file_path"), py::arg("position") = Vec3{0,0,0},
+             py::arg("scale") = Vec3{1,1,1}, py::arg("rotation") = Vec3{0,0,0},
+             py::arg("material") = Material{}, py::arg("is_static") = false, py::arg("has_physics") = true,
+             py::return_value_policy::reference)
+        .def("add_joint", &SceneBuilder::addJoint,
+             py::arg("name"), py::arg("parent_name"), py::arg("child_name"),
+             py::arg("type") = kinematics::JointType::Revolute,
+             py::arg("anchor") = Vec3{0,0,0}, py::arg("axis") = Vec3{0,1,0},
+             py::arg("min_limit") = -3.14159f, py::arg("max_limit") = 3.14159f,
+             py::return_value_policy::reference)
+        .def("add_urdf", &SceneBuilder::addURDF,
+             py::arg("urdf_file_path"), py::arg("base_position") = Vec3{0,0,0}, py::arg("base_scale") = Vec3{1,1,1},
+             py::return_value_policy::reference)
+        .def("build", &SceneBuilder::build);
+
+
+
     // 5. SimConfig Bindings
     py::class_<SimConfig>(m, "SimConfig")
         .def(py::init<>())
@@ -114,50 +153,19 @@ PYBIND11_MODULE(corium_sim_py, m) {
         .def_property("config",
             [](SimLabApp& self) -> SimConfig& { return self.config(); },
             [](SimLabApp& self, const SimConfig& cfg) { self.setConfig(cfg); })
-        .def("setup_default_scene", [](SimLabApp& self) {
-            if (!self.renderer().isInitialized()) {
-                self.renderer().initialize(nullptr, 1280, 720);
-            }
-            WGPUDevice device = self.renderer().device();
-            WGPUQueue queue = self.renderer().queue();
-            self.setScene(
-                scene::SimScene::builder(device, queue)
-                    .addGroundGrid(50.0f, 50.0f, 50)
-                    .addModel("agent_robot", "assets/models/sample_robot.obj", Vec3{0.0f, 0.0f, 0.0f})
-                    .addCube("target_goal", Vec3{4.0f, 0.75f, -2.0f}, Vec3{1.2f, 1.2f, 1.2f})
-                    .addSphere("obstacle_ball", Vec3{-3.0f, 1.0f, 2.0f}, 1.0f)
-                    .build()
-            );
-        }, "Set up the default 3D RL environment scene (ground grid, agent, target, obstacle).")
-        .def("setup_robotic_arm_scene", [](SimLabApp& self) {
-            if (!self.renderer().isInitialized()) {
-                self.renderer().initialize(nullptr, 1280, 720);
-            }
-            WGPUDevice device = self.renderer().device();
-            WGPUQueue queue = self.renderer().queue();
-            self.setScene(
-                scene::SimScene::builder(device, queue)
-                    .addGroundGrid(60.0f, 60.0f, 60)
-                    .addCube("workstation_table", Vec3{0.0f, 0.4f, 0.0f}, Vec3{3.0f, 0.8f, 2.0f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Metallic({0.4f, 0.45f, 0.50f, 1.0f}, 0.35f), true)
-                    .addModel("agent_robot", "assets/models/sample_robot.obj", Vec3{0.0f, 0.8f, 0.0f}, Vec3{0.8f, 0.8f, 0.8f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Metallic({0.95f, 0.95f, 0.98f, 1.0f}, 0.15f), true)
-                    .addCube("shoulder_link", Vec3{0.0f, 1.4f, 0.0f}, Vec3{0.4f, 1.0f, 0.4f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Glossy({0.15f, 0.55f, 0.95f, 1.0f}))
-                    .addCube("elbow_link", Vec3{0.0f, 2.3f, 0.0f}, Vec3{0.3f, 0.8f, 0.3f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Glossy({0.95f, 0.85f, 0.10f, 1.0f}))
-                    .addCube("wrist_link", Vec3{0.0f, 2.9f, 0.0f}, Vec3{0.25f, 0.4f, 0.25f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Metallic({0.85f, 0.88f, 0.90f, 1.0f}, 0.25f))
-                    .addCube("gripper_finger_l", Vec3{-0.15f, 3.2f, 0.0f}, Vec3{0.08f, 0.3f, 0.12f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Matte({0.2f, 0.2f, 0.25f, 1.0f}))
-                    .addCube("gripper_finger_r", Vec3{0.15f, 3.2f, 0.0f}, Vec3{0.08f, 0.3f, 0.12f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Matte({0.2f, 0.2f, 0.25f, 1.0f}))
-                    .addJoint("joint_shoulder_yaw", "agent_robot", "shoulder_link", kinematics::JointType::Revolute, Vec3{0.0f, 0.6f, 0.0f}, Vec3{0.0f, 1.0f, 0.0f}, -3.14159f, 3.14159f)
-                    .addJoint("joint_elbow_pitch", "shoulder_link", "elbow_link", kinematics::JointType::Revolute, Vec3{0.0f, 0.9f, 0.0f}, Vec3{1.0f, 0.0f, 0.0f}, -2.0944f, 2.0944f)
-                    .addJoint("joint_wrist_roll", "elbow_link", "wrist_link", kinematics::JointType::Revolute, Vec3{0.0f, 0.6f, 0.0f}, Vec3{0.0f, 1.0f, 0.0f}, -3.14159f, 3.14159f)
-                    .addJoint("joint_gripper_l", "wrist_link", "gripper_finger_l", kinematics::JointType::Prismatic, Vec3{-0.15f, 0.3f, 0.0f}, Vec3{-1.0f, 0.0f, 0.0f}, 0.0f, 0.1f)
-                    .addJoint("joint_gripper_r", "wrist_link", "gripper_finger_r", kinematics::JointType::Prismatic, Vec3{0.15f, 0.3f, 0.0f}, Vec3{1.0f, 0.0f, 0.0f}, 0.0f, 0.1f)
-                    .addCube("inspection_platform", Vec3{3.5f, 0.5f, -1.5f}, Vec3{2.0f, 1.0f, 1.5f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Metallic({0.5f, 0.52f, 0.55f, 1.0f}, 0.40f), true)
-                    .addCube("target_workpiece", Vec3{3.5f, 1.25f, -1.5f}, Vec3{0.6f, 0.5f, 0.6f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Metallic({0.95f, 0.10f, 0.15f, 1.0f}, 0.10f))
-                    .addCube("safety_barrier", Vec3{-2.5f, 0.6f, 2.5f}, Vec3{3.5f, 1.2f, 0.2f}, Vec3{0.0f, 0.0f, 0.0f}, Material::Matte({0.95f, 0.80f, 0.05f, 1.0f}), true)
-                    .build()
-            );
-        }, "Set up the 3D industrial robotic manipulator workstation scene.")
+        .def("set_scene", [](SimLabApp& self, SimScene& scene) {
+            self.setScene(std::move(scene));
+        }, py::arg("scene"), "Set active 3D simulation environment scene.")
 
+        .def("create_scene_builder", [](SimLabApp& self) {
+            if (!self.renderer().isInitialized()) {
+                self.renderer().initialize(nullptr, 1280, 720);
+            }
+            return SimScene::builder(self.renderer().device(), self.renderer().queue());
+        }, "Create a fluent SceneBuilder to construct user-defined 3D environment scenes.")
         .def("load_scene_mesh", &SimLabApp::loadSceneMesh, py::arg("obj_file_path"), "Load an OBJ 3D mesh model into the scene.")
+
+
         .def("load_urdf", [](SimLabApp& self, const std::string& urdfFilePath) {
             if (!self.renderer().isInitialized()) {
                 self.renderer().initialize(nullptr, 1280, 720);
@@ -278,25 +286,107 @@ PYBIND11_MODULE(corium_sim_py, m) {
         .def("get_observation", [](SimLabApp& self) {
             scene::SimEntity* agent = self.scene().findEntity("agent_robot");
             if (!agent) agent = self.scene().findEntity("robot_agent");
+            if (!agent) agent = self.scene().findEntity("agent");
+            if (!agent) {
+                for (auto& entity : self.scene().entities()) {
+                    if (!entity.isStatic) {
+                        agent = &entity;
+                        break;
+                    }
+                }
+            }
 
             scene::SimEntity* target = self.scene().findEntity("target_goal");
             if (!target) target = self.scene().findEntity("target_box");
             if (!target) target = self.scene().findEntity("target_workpiece");
 
             py::dict obs;
-            if (agent && target) {
-                float dist = (agent->position - target->position).length();
+            if (agent) {
+                Vec3 agentPos = agent->position;
+                Vec3 targetPos = target ? target->position : Vec3{4.0f, 0.75f, -2.0f};
+                float dist = (agentPos - targetPos).length();
                 bool isReached = (dist < 1.5f);
                 float reward = -dist + (isReached ? 100.0f : 0.0f);
 
-                obs["agent_pos"] = std::vector<float>{agent->position.x, agent->position.y, agent->position.z};
+                obs["agent_pos"] = std::vector<float>{agentPos.x, agentPos.y, agentPos.z};
                 obs["agent_vel"] = std::vector<float>{agent->velocity.x, agent->velocity.y, agent->velocity.z};
-                obs["target_pos"] = std::vector<float>{target->position.x, target->position.y, target->position.z};
+                obs["target_pos"] = std::vector<float>{targetPos.x, targetPos.y, targetPos.z};
                 obs["distance"] = dist;
                 obs["reward"] = reward;
                 obs["terminated"] = isReached;
             }
             return obs;
         });
+
+    // 6. Physical Environment & Raycast LiDAR Bindings
+    py::class_<TaskStepResult>(m, "TaskStepResult")
+        .def(py::init<>())
+        .def_readwrite("reward", &TaskStepResult::reward)
+        .def_readwrite("done", &TaskStepResult::done)
+        .def_readwrite("truncated", &TaskStepResult::truncated)
+        .def_readwrite("info", &TaskStepResult::info);
+
+    py::class_<DefaultSimEnvironment>(m, "SimEnvironment")
+        .def(py::init<>())
+        .def("step", &DefaultSimEnvironment::step, py::arg("dt") = 0.01667f)
+        .def("reset", &DefaultSimEnvironment::reset)
+        .def("evaluate_task", &DefaultSimEnvironment::evaluateTask)
+        .def("current_step", &DefaultSimEnvironment::currentStep)
+        .def("elapsed_time", &DefaultSimEnvironment::elapsedTime);
+
+
+    py::class_<DomainRandomizationConfig>(m, "DomainRandomizationConfig")
+        .def(py::init<>())
+        .def_readwrite("enable_pose_randomization", &DomainRandomizationConfig::enablePoseRandomization)
+        .def_readwrite("position_std_dev", &DomainRandomizationConfig::positionStdDev)
+        .def_readwrite("rotation_std_dev", &DomainRandomizationConfig::rotationStdDev)
+        .def_readwrite("enable_physics_randomization", &DomainRandomizationConfig::enablePhysicsRandomization)
+        .def_readwrite("mass_scale_range", &DomainRandomizationConfig::massScaleRange)
+        .def_readwrite("friction_scale_range", &DomainRandomizationConfig::frictionScaleRange)
+        .def_readwrite("enable_sensor_noise", &DomainRandomizationConfig::enableSensorNoise)
+        .def_readwrite("sensor_noise_std_dev", &DomainRandomizationConfig::sensorNoiseStdDev);
+
+    py::class_<DomainRandomizer>(m, "DomainRandomizer")
+        .def(py::init<>())
+        .def(py::init<DomainRandomizationConfig>(), py::arg("config"))
+        .def("randomize_scene", &DomainRandomizer::randomizeScene, py::arg("scene"))
+        .def_property("config",
+            [](DomainRandomizer& self) -> DomainRandomizationConfig& { return self.config(); },
+            [](DomainRandomizer& self, const DomainRandomizationConfig& cfg) { self.config() = cfg; });
+
+    py::class_<RewardBuilder>(m, "RewardBuilder")
+        .def(py::init<>())
+        .def("add_distance_penalty", [](RewardBuilder& self, float weight) {
+            return self.addTerm<DistanceToGoalPenalty>(weight);
+        }, py::arg("weight") = 1.0f, py::return_value_policy::reference)
+        .def("add_goal_bonus", [](RewardBuilder& self, float bonus, float threshold) {
+            return self.addTerm<GoalReachedBonus>(bonus, threshold);
+        }, py::arg("bonus") = 100.0f, py::arg("threshold") = 0.5f, py::return_value_policy::reference)
+        .def("add_action_smoothing_penalty", [](RewardBuilder& self, float weight) {
+            return self.addTerm<ActionSmoothingPenalty>(weight);
+        }, py::arg("weight") = 0.01f, py::return_value_policy::reference)
+        .def("add_collision_penalty", [](RewardBuilder& self, float penalty) {
+            return self.addTerm<CollisionPenalty>(penalty);
+        }, py::arg("penalty") = 50.0f, py::return_value_policy::reference)
+        .def("compute_reward", [](RewardBuilder& self, const Vec3& agentPos, const Vec3& targetPos, const std::vector<float>& action, bool isCollided) {
+            return self.computeTotalReward(agentPos, targetPos, action, isCollided);
+        }, py::arg("agent_pos"), py::arg("target_pos"), py::arg("action"), py::arg("is_collided") = false);
+
+    py::class_<RaycastHit>(m, "RaycastHit")
+        .def(py::init<>())
+        .def_readwrite("hit", &RaycastHit::hit)
+        .def_readwrite("distance", &RaycastHit::distance)
+        .def_readwrite("point", &RaycastHit::point)
+        .def_readwrite("normal", &RaycastHit::normal)
+        .def_readwrite("entity_name", &RaycastHit::entityName);
+
+    m.def("cast_ray", &Raycast::castRay,
+          py::arg("scene"), py::arg("origin"), py::arg("direction"), py::arg("max_distance") = 50.0f);
+
+
+    m.def("cast_lidar_scan", &Raycast::castLidarScan,
+          py::arg("scene"), py::arg("origin"), py::arg("forward_dir") = Vec3{0.0f, 0.0f, 1.0f},
+          py::arg("num_rays") = 36, py::arg("fov_degrees") = 360.0f, py::arg("max_distance") = 20.0f);
 }
+
 

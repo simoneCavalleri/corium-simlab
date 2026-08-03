@@ -17,26 +17,36 @@ except ImportError:
 
 class CoriumEnv:
     """
-    Standard Gymnasium-compliant Reinforcement Learning Environment for Corium SimLab.
+    Standard Gymnasium-compliant Physical Agent Incubator Environment for Corium SimLab.
 
-    Actions:
-        action[0]: move_forward  — linear velocity forward/backward [-1, 1]
-        action[1]: turn_yaw      — angular velocity yaw rotation [-1, 1]
-        action[2]: move_up       — vertical velocity up/down [-1, 1]
-
-    Observations:
-        "vector": np.array of shape (9,) — [agent_pos(3), agent_vel(3), target_pos(3)]
-        "rgb":    np.array of shape (128, 128, 4) — RGBA sensor camera frame
+    The user explicitly defines the environment scene via a `scene_builder_fn` callback.
     """
-    def __init__(self, render_mode: str = "human", max_steps: int = 500, sim_dt: float = 0.016667):
+    def __init__(self, scene_builder_fn=None, render_mode: str = "human", max_steps: int = 500, sim_dt: float = 0.016667,
+                 action_shape: tuple = (3,), observation_shape: tuple = (9,)):
         self.render_mode = render_mode
         self._app = corium_sim_py.SimLabApp()
-        self._app.setup_default_scene()
+
+        if scene_builder_fn is not None:
+            builder = self._app.create_scene_builder()
+            user_scene = scene_builder_fn(builder)
+            if hasattr(user_scene, "build"):
+                user_scene = user_scene.build()
+            self._app.set_scene(user_scene)
+        else:
+            # Explicit default user environment setup via SceneBuilder
+            builder = self._app.create_scene_builder()
+            scene = (builder
+                     .add_ground_grid(50.0, 50.0, 50)
+                     .add_cube("agent_robot", corium_sim_py.Vec3(0.0, 0.5, 0.0), corium_sim_py.Vec3(1.0, 1.0, 1.0))
+                     .add_cube("target_goal", corium_sim_py.Vec3(4.0, 0.75, -2.0), corium_sim_py.Vec3(1.2, 1.2, 1.2))
+                     .build())
+            self._app.set_scene(scene)
+
         self._step_count = 0
         self._max_steps = max_steps
         self._sim_dt = sim_dt
-        self.action_space_shape = (3,)
-        self.observation_space_shape = (9,)
+        self.action_space_shape = action_shape
+        self.observation_space_shape = observation_shape
 
     @property
     def action_space(self):
@@ -56,8 +66,7 @@ class CoriumEnv:
 
     def step(self, action):
         """
-        Execute environment step with action vector:
-        action = [move_forward, turn_yaw, move_up]
+        Execute environment step with user action vector.
         """
         self._step_count += 1
 
@@ -65,7 +74,7 @@ class CoriumEnv:
         turn_yaw = float(action[1]) if len(action) > 1 else 0.0
         move_up = float(action[2]) if len(action) > 2 else 0.0
 
-        # Apply agent action forces and advance physics simulation
+        # Apply agent action forces and advance physics simulation step
         self._app.apply_action(move_forward, turn_yaw, move_up)
         self._app.sim_step(self._sim_dt)
 
