@@ -77,6 +77,10 @@ public:
     math::Vec3 mountOffset{0.0f, 0.5f, 0.0f};
     bool enableVisualization = true;
 
+    GpuRaycastLidarSensor(float maxDist = 20.0f, float fovDeg = 180.0f, bool viz = true, math::Vec3 offset = {0.0f, 0.5f, 0.0f})
+        : maxDistance(maxDist), fovDegrees(fovDeg), mountOffset(offset), enableVisualization(viz),
+          _sensorCamera(static_cast<uint32_t>(RayCount), 1, fovDeg) {}
+
     [[nodiscard]] const std::vector<math::Vec3>& hitPoints() const noexcept { return _hitPoints; }
 
     [[nodiscard]] std::span<const float> sample(

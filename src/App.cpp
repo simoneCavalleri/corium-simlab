@@ -207,9 +207,27 @@ void SimLabApp::onRender(double deltaTime)
     _camera.update(dt);
 
     if (_gpuBackend.beginFrame(_camera) && _scene) {
-        for (const auto& entity : _scene->entities()) {
+        WGPUDevice device = _gpuBackend.device();
+        WGPUQueue queue = _gpuBackend.queue();
+
+        for (auto& entity : _scene->entities()) {
+            if (!entity.mesh.isValid() && device && queue) {
+                switch (entity.shape) {
+                    case scene::EntityShape::PlaneGrid:
+                        entity.mesh = renderer::Mesh::createPlane(device, queue, 60.0f, 60.0f, 60);
+                        break;
+                    case scene::EntityShape::Cylinder:
+                        entity.mesh = renderer::Mesh::createCylinder(device, queue, 0.5f, 1.0f, 16);
+                        break;
+                    case scene::EntityShape::Sphere:
+                    default:
+                        entity.mesh = renderer::Mesh::createSphere(device, queue, 0.5f, 12);
+                        break;
+                }
+            }
             if (entity.mesh.isValid()) {
-                _gpuBackend.drawMesh(entity.mesh, entity.texture, entity.transformMatrix(), entity.material);
+                const auto& tex = entity.texture.isValid() ? entity.texture : _gpuBackend.defaultCheckerTexture();
+                _gpuBackend.drawMesh(entity.mesh, tex, entity.transformMatrix(), entity.material);
             }
         }
         _gpuBackend.endFrame();

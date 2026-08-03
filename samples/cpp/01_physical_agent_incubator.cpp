@@ -100,10 +100,10 @@ int main(int argc, char** argv)
             .position = {0.0f, 0.5f, 0.0f},
             .mass = 15.0f
         })
-        // Pillar 3: Onboard Sensors (IMU + 180-Ray LiDAR)
+        // Pillar 3: Onboard Sensors (IMU + 180-Ray Real-Time Visualized LiDAR)
         .withSensors(
             sensors::ImuSensor{},
-            sensors::LidarSensor<180>{}
+            sensors::LidarSensor<180>{20.0f, 180.0f, true}
         )
         // Pillar 4: Perception Chain — fuse [posX, posZ, yawDeg, minLidarDist]
         // ImuSensor layout: [0]=pos.x [1]=pos.y [2]=pos.z
