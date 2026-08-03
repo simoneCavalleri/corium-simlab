@@ -282,6 +282,8 @@ void WebGpuRenderPipeline::createRenderPipeline(WGPUDevice device, WGPUTextureFo
     depthState.format = WGPUTextureFormat_Depth24Plus;
     depthState.depthWriteEnabled = true;
     depthState.depthCompare = WGPUCompareFunction_Less;
+    depthState.stencilFront.compare = WGPUCompareFunction_Always;
+    depthState.stencilBack.compare = WGPUCompareFunction_Always;
 
     WGPURenderPipelineDescriptor pipelineDesc{};
     pipelineDesc.layout = _pipelineLayout;
