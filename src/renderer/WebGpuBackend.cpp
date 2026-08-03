@@ -69,8 +69,20 @@ bool WebGpuBackend::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
 
     CORIUM_LOG_INFO("WebGpuBackend", "Initializing 3D WebGPU Engine (", width, "x", height, ")...");
 
-    // 1. Create WebGPU Instance
+    // Unbind any active GLFW OpenGL context so WebGPU (Vulkan / EGL) can claim the native window surface
+#if __has_include(<GLFW/glfw3.h>)
+    if (glfwGetCurrentContext() != nullptr) {
+        glfwMakeContextCurrent(nullptr);
+    }
+#endif
+
+    // 1. Create WebGPU Instance (Prefer Vulkan / Primary native backends)
+    WGPUInstanceExtras instanceExtras{};
+    instanceExtras.chain.sType = static_cast<WGPUSType>(WGPUSType_InstanceExtras);
+    instanceExtras.backends = WGPUInstanceBackend_Primary | WGPUInstanceBackend_GL;
+
     WGPUInstanceDescriptor instanceDesc{};
+    instanceDesc.nextInChain = &instanceExtras.chain;
     _instance = wgpuCreateInstance(&instanceDesc);
 
     // 2. Create Surface from Native GLFW Window
@@ -89,12 +101,20 @@ bool WebGpuBackend::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
             [](WGPURequestAdapterStatus status, WGPUAdapter adapter, const char* message, void* userdata) {
                 if (status == WGPURequestAdapterStatus_Success && adapter) {
                     *static_cast<WGPUAdapter*>(userdata) = adapter;
-                } else if (message) {
-                    CORIUM_LOG_WARN("WebGpuBackend", "Adapter message: ", message);
+                } else {
+                    CORIUM_LOG_WARN("WebGpuBackend", "Adapter request status=", static_cast<int>(status), " message: ", (message ? message : "None"));
                 }
             },
             &_adapter
         );
+    }
+
+    if (_adapter) {
+        WGPUAdapterProperties props{};
+        wgpuAdapterGetProperties(_adapter, &props);
+        CORIUM_LOG_INFO("WebGpuBackend", "GPU Adapter: ", (props.name ? props.name : "Unknown"), " (BackendType=", static_cast<int>(props.backendType), ")");
+    } else {
+        CORIUM_LOG_ERROR("WebGpuBackend", "Failed to obtain WGPUAdapter!");
     }
 
     // 4. Request GPU Device
@@ -106,8 +126,8 @@ bool WebGpuBackend::initialize(GLFWwindow* windowHandle, uint32_t width, uint32_
             [](WGPURequestDeviceStatus status, WGPUDevice device, const char* message, void* userdata) {
                 if (status == WGPURequestDeviceStatus_Success && device) {
                     *static_cast<WGPUDevice*>(userdata) = device;
-                } else if (message) {
-                    CORIUM_LOG_WARN("WebGpuBackend", "Device message: ", message);
+                } else {
+                    CORIUM_LOG_WARN("WebGpuBackend", "Device request status=", static_cast<int>(status), " message: ", (message ? message : "None"));
                 }
             },
             &_device
@@ -162,13 +182,13 @@ OffscreenTarget WebGpuBackend::createOffscreenTarget(uint32_t width, uint32_t he
     colorDesc.size = WGPUExtent3D{ width, height, 1 };
     colorDesc.mipLevelCount = 1;
     colorDesc.sampleCount = 1;
-    colorDesc.format = WGPUTextureFormat_BGRA8Unorm;
+    colorDesc.format = _surfaceFormat;
     colorDesc.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopySrc | WGPUTextureUsage_TextureBinding;
 
     target.colorTexture = wgpuDeviceCreateTexture(_device, &colorDesc);
 
     WGPUTextureViewDescriptor colorViewDesc{};
-    colorViewDesc.format = WGPUTextureFormat_BGRA8Unorm;
+    colorViewDesc.format = _surfaceFormat;
     colorViewDesc.dimension = WGPUTextureViewDimension_2D;
     colorViewDesc.baseMipLevel = 0;
     colorViewDesc.mipLevelCount = 1;
@@ -632,15 +652,40 @@ void WebGpuBackend::shutdown() noexcept
 
 void WebGpuBackend::configureSurface()
 {
-    if (_surface && _device) {
+    if (_surface && _device && _adapter) {
+        WGPUSurfaceCapabilities caps{};
+        wgpuSurfaceGetCapabilities(_surface, _adapter, &caps);
+        CORIUM_LOG_INFO("WebGpuBackend", "Surface caps formatCount=", caps.formatCount, ", alphaModeCount=", caps.alphaModeCount);
+
+        WGPUTextureFormat format = WGPUTextureFormat_BGRA8Unorm;
+        if (caps.formatCount > 0) {
+            format = caps.formats[0];
+            for (size_t i = 0; i < caps.formatCount; ++i) {
+                if (caps.formats[i] == WGPUTextureFormat_BGRA8Unorm || caps.formats[i] == WGPUTextureFormat_RGBA8Unorm) {
+                    format = caps.formats[i];
+                    break;
+                }
+            }
+        }
+        WGPUCompositeAlphaMode alphaMode = (caps.alphaModeCount > 0) ? caps.alphaModes[0] : WGPUCompositeAlphaMode_Auto;
+
+        _surfaceFormat = format;
+        CORIUM_LOG_INFO("WebGpuBackend", "Selected surface format=", static_cast<int>(format), ", alphaMode=", static_cast<int>(alphaMode));
+
         WGPUSurfaceConfiguration config{};
         config.device = _device;
-        config.format = WGPUTextureFormat_BGRA8Unorm;
+        config.format = format;
         config.usage = WGPUTextureUsage_RenderAttachment;
         config.width = _width;
         config.height = _height;
         config.presentMode = WGPUPresentMode_Fifo;
+        config.alphaMode = alphaMode;
+
         wgpuSurfaceConfigure(_surface, &config);
+
+        wgpuSurfaceCapabilitiesFreeMembers(caps);
+    } else if (!_surface) {
+        CORIUM_LOG_WARN("WebGpuBackend", "Cannot configure surface: _surface is null!");
     }
 }
 
@@ -759,7 +804,7 @@ void WebGpuBackend::createRenderPipeline()
 
     // Color Target State
     WGPUColorTargetState colorTarget{};
-    colorTarget.format = WGPUTextureFormat_BGRA8Unorm;
+    colorTarget.format = _surfaceFormat;
     colorTarget.blend = nullptr;
     colorTarget.writeMask = WGPUColorWriteMask_All;
 

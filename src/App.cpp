@@ -7,7 +7,7 @@ namespace corium_sim {
 using namespace math;
 
 SimLabApp::SimLabApp()
-    : BaseApp({ .title = "Corium SimLab — Real-Time Agent Simulation Environment", .width = 1280, .height = 720 })
+    : BaseApp({ .title = "Corium SimLab — Real-Time Agent Simulation Environment", .width = 1280, .height = 720, .noApi = true })
 {}
 
 SimLabApp::~SimLabApp() = default;

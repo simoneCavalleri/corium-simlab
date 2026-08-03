@@ -125,6 +125,7 @@ private:
     WGPUDevice _device = nullptr;
     WGPUQueue _queue = nullptr;
     WGPUSurface _surface = nullptr;
+    WGPUTextureFormat _surfaceFormat = WGPUTextureFormat_BGRA8Unorm;
 
     WGPUTexture _depthTexture = nullptr;
     WGPUTextureView _depthTextureView = nullptr;
