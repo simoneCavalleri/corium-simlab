@@ -40,6 +40,19 @@ public:
     void onRender(double deltaTime);
     void onShutdown();
 
+    /// @brief Register event handler with automatic event type deduction.
+    template <typename Handler>
+    bool on(Handler&& handler)
+    {
+        return BaseApp::events().registerHandler(std::forward<Handler>(handler));
+    }
+
+    /// @brief Access underlying Corium EventBus reference.
+    [[nodiscard]] SimRuntime::EventBusType& events() noexcept
+    {
+        return BaseApp::events();
+    }
+
     /// @brief Set active 3D simulation scene (shared_ptr or move value).
     void setScene(std::shared_ptr<scene::SimScene> scene) noexcept;
     void setScene(scene::SimScene scene) noexcept;
@@ -53,12 +66,15 @@ public:
     /// @brief Register custom simulation step callback (e.g. Incubator step / Policy step loop).
     void onStep(StepCallback callback) { _stepCallback = std::move(callback); }
 
-    /// @brief Attach a 3D Simulation Arena instance (shared_ptr): links 3D scene, binds WebGPU rendering backend for GPU sensors, and registers step loop.
+    /// @brief Attach a 3D Simulation Arena instance (shared_ptr): links 3D scene, binds WebGPU rendering backend for GPU sensors, wires event sink for telemetry, and registers step loop.
     template <typename ArenaType>
     void attachArena(std::shared_ptr<ArenaType> arena)
     {
         if (!arena) return;
         arena->setRenderBackend(&_gpuBackend);
+        if constexpr (requires { arena->setEventSink(this->eventSink()); }) {
+            arena->setEventSink(this->eventSink());
+        }
         setScene(arena->scenePtr());
         onStep([arena](SimLabApp&, float dt) {
             (void)arena->step(dt);

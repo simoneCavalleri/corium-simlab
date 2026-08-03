@@ -6,6 +6,8 @@
 
 #include "corium_sim/App.hpp"
 #include "corium_sim/SimConfig.hpp"
+#include "corium_sim/events/SimEvents.hpp"
+#include "corium_sim/events/SimEventTracer.hpp"
 #include "corium_sim/math/Math.hpp"
 #include "corium_sim/renderer/Material.hpp"
 #include "corium_sim/scene/SceneBuilder.hpp"
@@ -389,6 +391,29 @@ PYBIND11_MODULE(corium_sim_py, m) {
     m.def("cast_lidar_scan", &Raycast::castLidarScan,
           py::arg("scene"), py::arg("origin"), py::arg("forward_dir") = Vec3{0.0f, 0.0f, 1.0f},
           py::arg("num_rays") = 36, py::arg("fov_degrees") = 360.0f, py::arg("max_distance") = 20.0f);
+
+    // 7. Event Tracing & Telemetry Bindings
+    py::class_<events::TraceEntry>(m, "TraceEntry")
+        .def(py::init<>())
+        .def_readwrite("step_index", &events::TraceEntry::stepIndex)
+        .def_readwrite("timestamp_ms", &events::TraceEntry::timestampMs)
+        .def_readwrite("event_type", &events::TraceEntry::eventType)
+        .def_readwrite("summary", &events::TraceEntry::summary)
+        .def_readwrite("details_json", &events::TraceEntry::detailsJson);
+
+    py::class_<events::SimEventTracer>(m, "SimEventTracer")
+        .def(py::init<>())
+        .def("start_tracing", &events::SimEventTracer::startTracing)
+        .def("stop_tracing", &events::SimEventTracer::stopTracing)
+        .def("is_tracing", &events::SimEventTracer::isTracing)
+        .def("clear", &events::SimEventTracer::clear)
+        .def("trace_count", &events::SimEventTracer::traceCount)
+        .def("traces", &events::SimEventTracer::traces)
+        .def("log_summary", &events::SimEventTracer::logSummary)
+        .def("export_to_json", &events::SimEventTracer::exportToJson, py::arg("file_path"))
+        .def("register_with_app", [](events::SimEventTracer& self, SimLabApp& app) {
+            self.registerWith(app);
+        }, py::arg("app"));
 }
 
 

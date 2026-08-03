@@ -6,7 +6,9 @@
 #include <tuple>
 #include <utility>
 
+#include <corium/IEventSink.hpp>
 #include "corium_sim/agent/Concepts.hpp"
+#include "corium_sim/events/SimEvents.hpp"
 #include "corium_sim/scene/SimEntity.hpp"
 
 namespace corium_sim::agent {
@@ -27,7 +29,14 @@ public:
     /// @brief Apply aggregated action vector to target entity across all actuators.
     /// @param entity Target physical entity.
     /// @param action Aggregated action vector.
-    inline void apply(scene::SimEntity& entity, std::span<const float> action) noexcept
+    /// @param eventSink Optional Corium event sink handle for event-driven telemetry and tracing.
+    /// @param stepIndex Current simulation step index.
+    inline void apply(
+        scene::SimEntity& entity,
+        std::span<const float> action,
+        corium::IEventSinkT<DefaultSimEvents> eventSink = {},
+        uint64_t stepIndex = 0
+    ) noexcept
     {
         if constexpr (total_action_size == 0) {
             return;
@@ -39,7 +48,28 @@ public:
                 using ActuatorType = std::decay_t<decltype(actuator)>;
                 constexpr std::size_t size = ActuatorType::action_size;
                 if (offset + size <= action.size()) {
-                    actuator.apply(entity, action.subspan(offset, size));
+                    auto actSubspan = action.subspan(offset, size);
+                    actuator.apply(entity, actSubspan);
+
+                    if (eventSink) {
+                        std::vector<float> actVec(actSubspan.begin(), actSubspan.end());
+                        eventSink.post(ActuatorAppliedEvent{
+                            .actuatorName = entity.name.empty() ? "actuator" : (entity.name + "_actuator"),
+                            .actuatorType = typeid(ActuatorType).name(),
+                            .stepIndex = stepIndex,
+                            .actions = std::move(actVec)
+                        });
+
+                        if constexpr (size >= 2) {
+                            eventSink.post(AgentActionCommand{
+                                .agentId = entity.id,
+                                .moveForward = actSubspan[0],
+                                .turnYaw = actSubspan[1],
+                                .moveUp = (size >= 3 ? actSubspan[2] : 0.0f),
+                                .resetEpisode = false
+                            });
+                        }
+                    }
                 }
                 offset += size;
             }()), ...);

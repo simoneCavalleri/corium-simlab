@@ -11,6 +11,8 @@
 #include "corium_sim/agent/SensorSuite.hpp"
 #include "corium_sim/scene/SimEntity.hpp"
 
+#include "corium_sim/app/SimAgentApp.hpp"
+
 namespace corium_sim::agent {
 
 // Forward Declarations for AgentSpec Stages
@@ -42,7 +44,6 @@ public:
     AgentSpec(AgentSpec&&) noexcept = default;
     AgentSpec& operator=(AgentSpec&&) noexcept = default;
 
-
     [[nodiscard]] ModelType& model() noexcept { return _model; }
     [[nodiscard]] const ModelType& model() const noexcept { return _model; }
 
@@ -54,6 +55,79 @@ public:
 
     [[nodiscard]] PolicyType& policy() noexcept { return _policy; }
     [[nodiscard]] const PolicyType& policy() const noexcept { return _policy; }
+
+    /// @brief Automatically instantiate the underlying Corium SimAgentApp behind the scenes!
+    /// Wires SensorService, PlannerService, and ActuatorService directly to target Agent instance.
+    template <typename AgentType, typename SceneType = scene::SimScene>
+    auto createApp(std::shared_ptr<AgentType> agentPtr, SceneType* scenePtr = nullptr, renderer::WebGpuBackend* renderBackend = nullptr)
+    {
+        auto agentApp = std::make_shared<app::ConfigurableSimAgentApp>();
+
+        // Wire SensorService behind the scenes
+        agentApp->sensorService().setSampleFunc([agentPtr, scenePtr, renderBackend](uint64_t stepIndex) -> std::vector<float> {
+            if (!agentPtr) return {};
+            if (!scenePtr) {
+                scene::SimScene dummyScene;
+                auto obs = agentPtr->observe(dummyScene, renderBackend, {}, stepIndex);
+                return std::vector<float>(obs.begin(), obs.end());
+            }
+            auto obs = agentPtr->observe(*scenePtr, renderBackend, {}, stepIndex);
+            return std::vector<float>(obs.begin(), obs.end());
+        });
+
+        // Wire PlannerService behind the scenes
+        agentApp->plannerService().setPlanFunc([this](const std::vector<float>& obs) -> std::vector<float> {
+            if constexpr (requires { _policy.plan(obs); }) {
+                auto action = _policy.plan(obs);
+                return std::vector<float>(action.begin(), action.end());
+            } else {
+                auto action = _policy(obs);
+                return std::vector<float>(action.begin(), action.end());
+            }
+        });
+
+        // Wire ActuatorService behind the scenes
+        agentApp->actuatorService().setApplyFunc([agentPtr](std::span<const float> actions, uint64_t stepIndex) {
+            if (agentPtr) {
+                agentPtr->actuate(actions, {}, stepIndex);
+            }
+        });
+
+        return agentApp;
+    }
+
+    /// @brief Standalone createApp overload using embedded model/perception/actuators.
+    template <typename SceneType = scene::SimScene>
+    auto createApp(SceneType* scenePtr = nullptr, renderer::WebGpuBackend* renderBackend = nullptr)
+    {
+        auto agentApp = std::make_shared<app::ConfigurableSimAgentApp>();
+
+        agentApp->sensorService().setSampleFunc([this, scenePtr, renderBackend](uint64_t stepIndex) -> std::vector<float> {
+            if (!scenePtr) {
+                scene::SimScene dummyScene;
+                auto obs = _perception.observe(_model, dummyScene, renderBackend, {}, stepIndex);
+                return std::vector<float>(obs.begin(), obs.end());
+            }
+            auto obs = _perception.observe(_model, *scenePtr, renderBackend, {}, stepIndex);
+            return std::vector<float>(obs.begin(), obs.end());
+        });
+
+        agentApp->plannerService().setPlanFunc([this](const std::vector<float>& obs) -> std::vector<float> {
+            if constexpr (requires { _policy.plan(obs); }) {
+                auto action = _policy.plan(obs);
+                return std::vector<float>(action.begin(), action.end());
+            } else {
+                auto action = _policy(obs);
+                return std::vector<float>(action.begin(), action.end());
+            }
+        });
+
+        agentApp->actuatorService().setApplyFunc([this](std::span<const float> actions, uint64_t stepIndex) {
+            _actuators.apply(_model, actions, {}, stepIndex);
+        });
+
+        return agentApp;
+    }
 
 private:
     ModelType _model;

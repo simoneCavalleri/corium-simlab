@@ -5,8 +5,10 @@
 #include <span>
 #include <utility>
 
+#include <corium/IEventSink.hpp>
 #include "corium_sim/agent/Concepts.hpp"
 #include "corium_sim/agent/SensorSuite.hpp"
+#include "corium_sim/events/SimEvents.hpp"
 #include "corium_sim/scene/SimEntity.hpp"
 #include "corium_sim/scene/SimScene.hpp"
 
@@ -44,10 +46,12 @@ public:
     [[nodiscard]] inline ProcessedObservationBuffer observe(
         const scene::SimEntity& entity,
         const scene::SimScene& scene,
-        renderer::WebGpuBackend* gpuBackend = nullptr
+        renderer::WebGpuBackend* gpuBackend = nullptr,
+        corium::IEventSinkT<DefaultSimEvents> eventSink = {},
+        uint64_t stepIndex = 0
     ) noexcept
     {
-        RawObservationBuffer rawObs = _sensorSuite.observe(entity, scene, gpuBackend);
+        RawObservationBuffer rawObs = _sensorSuite.observe(entity, scene, gpuBackend, eventSink, stepIndex);
         return _processor(rawObs);
     }
 

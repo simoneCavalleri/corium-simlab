@@ -88,6 +88,9 @@ int main(int argc, char** argv)
 
     runtime.initialize(app);
 
+    events::SimEventTracer tracer;
+    tracer.registerWith(app);
+
     // -------------------------------------------------------------------------
     // 1. DEFINE REUSABLE AGENT SPECIFICATION BLUEPRINT (7 Agent-Centric Pillars)
     // -------------------------------------------------------------------------
@@ -177,6 +180,7 @@ int main(int argc, char** argv)
     std::cout << "[Step 3] Launching 3D Interactive WebGPU Graphics Window...\n";
     app.run(runtime);
 
+    tracer.logSummary();
     runtime.shutdown();
     std::cout << "\n[SimArena] 3D Visual Physical Agent Simulation application shutdown complete.\n";
     return 0;

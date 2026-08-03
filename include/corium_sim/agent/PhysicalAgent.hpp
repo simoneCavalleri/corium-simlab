@@ -4,9 +4,11 @@
 #include <span>
 #include <utility>
 
+#include <corium/IEventSink.hpp>
 #include "corium_sim/agent/ActuatorSuite.hpp"
 #include "corium_sim/agent/Concepts.hpp"
 #include "corium_sim/agent/SensorSuite.hpp"
+#include "corium_sim/events/SimEvents.hpp"
 #include "corium_sim/scene/SimEntity.hpp"
 #include "corium_sim/scene/SimScene.hpp"
 
@@ -55,16 +57,22 @@ public:
     /// @brief Sample all sensors against surrounding 3D environment scene into zero-copy observation buffer.
     [[nodiscard]] inline ObservationBuffer observe(
         const scene::SimScene& scene,
-        renderer::WebGpuBackend* gpuBackend = nullptr
+        renderer::WebGpuBackend* gpuBackend = nullptr,
+        corium::IEventSinkT<DefaultSimEvents> eventSink = {},
+        uint64_t stepIndex = 0
     ) noexcept
     {
-        return _sensors.observe(_body, scene, gpuBackend);
+        return _sensors.observe(_body, scene, gpuBackend, eventSink, stepIndex);
     }
 
     /// @brief Apply aggregated action vector to agent actuators.
-    inline void actuate(std::span<const float> action) noexcept
+    inline void actuate(
+        std::span<const float> action,
+        corium::IEventSinkT<DefaultSimEvents> eventSink = {},
+        uint64_t stepIndex = 0
+    ) noexcept
     {
-        _actuators.apply(_body, action);
+        _actuators.apply(_body, action, eventSink, stepIndex);
     }
 
 private:

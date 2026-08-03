@@ -13,6 +13,10 @@
 #include "corium_sim/Log.hpp"
 #include "corium_sim/SimConfig.hpp"
 #include "corium_sim/events/SimEvents.hpp"
+#include "corium_sim/events/SimEventTracer.hpp"
+#include "corium_sim/services/SimServices.hpp"
+#include "corium_sim/app/SimAgentApp.hpp"
+#include "corium_sim/runtime/AgentRuntime.hpp"
 #include "corium_sim/math/Math.hpp"
 
 // -----------------------------------------------------------------------------

@@ -7,7 +7,9 @@
 #include <tuple>
 #include <utility>
 
+#include <corium/IEventSink.hpp>
 #include "corium_sim/agent/Concepts.hpp"
+#include "corium_sim/events/SimEvents.hpp"
 #include "corium_sim/scene/SimEntity.hpp"
 #include "corium_sim/scene/SimScene.hpp"
 
@@ -32,11 +34,15 @@ public:
     /// @param entity Target physical entity.
     /// @param scene Target 3D environment scene.
     /// @param gpuBackend Optional pointer to WebGPU rendering engine backend for GPU-accelerated sensors.
+    /// @param eventSink Optional Corium event sink handle for event-driven telemetry and tracing.
+    /// @param stepIndex Current simulation step index.
     /// @return Fixed-size array containing aggregated sensor observations.
     [[nodiscard]] inline ObservationBuffer observe(
         const scene::SimEntity& entity,
         const scene::SimScene& scene,
-        renderer::WebGpuBackend* gpuBackend = nullptr
+        renderer::WebGpuBackend* gpuBackend = nullptr,
+        corium::IEventSinkT<DefaultSimEvents> eventSink = {},
+        uint64_t stepIndex = 0
     ) noexcept
     {
         ObservationBuffer buffer{};
@@ -55,6 +61,17 @@ public:
                     obsSpan = sensor.sample(entity, scene);
                 }
                 std::copy(obsSpan.begin(), obsSpan.end(), buffer.begin() + offset);
+
+                if (eventSink) {
+                    std::vector<float> obsVec(obsSpan.begin(), obsSpan.end());
+                    eventSink.post(SensorSampleEvent{
+                        .sensorName = entity.name.empty() ? "sensor" : (entity.name + "_sensor"),
+                        .sensorType = typeid(SensorType).name(),
+                        .stepIndex = stepIndex,
+                        .observations = std::move(obsVec)
+                    });
+                }
+
                 offset += SensorType::observation_size;
             }()), ...);
         }, _sensors);

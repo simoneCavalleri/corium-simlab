@@ -79,7 +79,13 @@ public:
 
     GpuRaycastLidarSensor(float maxDist = 20.0f, float fovDeg = 180.0f, bool viz = true, math::Vec3 offset = {0.0f, 0.5f, 0.0f})
         : maxDistance(maxDist), fovDegrees(fovDeg), mountOffset(offset), enableVisualization(viz),
-          _sensorCamera(static_cast<uint32_t>(RayCount), 1, fovDeg) {}
+          _sensorCamera(static_cast<uint32_t>(RayCount), 1, fovDeg)
+    {
+        _rayOrigins.assign(RayCount, _lastOrigin);
+        _rayDirections.resize(RayCount);
+        _hitPoints.resize(RayCount);
+        _gpuDistances.resize(RayCount);
+    }
 
     [[nodiscard]] const std::vector<math::Vec3>& hitPoints() const noexcept { return _hitPoints; }
 
@@ -89,33 +95,30 @@ public:
         renderer::WebGpuBackend* gpuBackend = nullptr
     ) noexcept
     {
-        _hitPoints.resize(RayCount);
         _lastOrigin = entity.position + mountOffset;
         float startAngle = -fovDegrees * 0.5f * math::DEG2RAD;
         float angleStep = (RayCount > 1) ? (fovDegrees * math::DEG2RAD / static_cast<float>(RayCount)) : 0.0f;
         float yawRad = entity.rotation.y * math::DEG2RAD;
 
-        std::vector<math::Vec3> rayOrigins(RayCount, _lastOrigin);
-        std::vector<math::Vec3> rayDirections(RayCount);
         for (std::size_t i = 0; i < RayCount; ++i) {
+            _rayOrigins[i] = _lastOrigin;
             float rayAngle = yawRad + startAngle + static_cast<float>(i) * angleStep;
-            rayDirections[i] = math::Vec3{std::sin(rayAngle), 0.0f, std::cos(rayAngle)};
+            _rayDirections[i] = math::Vec3{std::sin(rayAngle), 0.0f, std::cos(rayAngle)};
         }
 
-        std::vector<float> gpuDistances;
         if (gpuBackend && gpuBackend->isInitialized() &&
-            gpuBackend->computeLidarRaycast(rayOrigins, rayDirections, scene, maxDistance, gpuDistances)) {
+            gpuBackend->computeLidarRaycast(_rayOrigins, _rayDirections, scene, maxDistance, _gpuDistances)) {
             for (std::size_t i = 0; i < RayCount; ++i) {
-                _distances[i] = gpuDistances[i];
-                _hitPoints[i] = _lastOrigin + rayDirections[i] * gpuDistances[i];
+                _distances[i] = _gpuDistances[i];
+                _hitPoints[i] = _lastOrigin + _rayDirections[i] * _gpuDistances[i];
             }
         } else {
             // CPU Raycast fallback
             for (std::size_t i = 0; i < RayCount; ++i) {
-                auto hit = physics::Raycast::castRay(scene, _lastOrigin, rayDirections[i], maxDistance);
+                auto hit = physics::Raycast::castRay(scene, _lastOrigin, _rayDirections[i], maxDistance);
                 float dist = hit.hit ? hit.distance : maxDistance;
                 _distances[i] = dist;
-                _hitPoints[i] = _lastOrigin + rayDirections[i] * dist;
+                _hitPoints[i] = _lastOrigin + _rayDirections[i] * dist;
             }
         }
 
@@ -129,6 +132,9 @@ private:
         if (!enableVisualization) return;
         auto& mutableScene = const_cast<scene::SimScene&>(scene);
         std::size_t stride = std::max<std::size_t>(1, RayCount / 45); // Limit density for smooth performance
+
+        // Pre-reserve capacity to guarantee zero vector reallocations during runtime!
+        mutableScene.reserveEntities(mutableScene.entities().size() + RayCount * 2);
 
         for (std::size_t i = 0; i < RayCount; i += stride) {
             math::Vec3 origin = _lastOrigin;
@@ -182,6 +188,9 @@ private:
     renderer::SensorCamera _sensorCamera{static_cast<uint32_t>(RayCount), 1, 180.0f};
     renderer::OffscreenTarget _target{};
     std::array<float, RayCount> _distances{};
+    std::vector<math::Vec3> _rayOrigins{};
+    std::vector<math::Vec3> _rayDirections{};
+    std::vector<float> _gpuDistances{};
     std::vector<math::Vec3> _hitPoints{};
     math::Vec3 _lastOrigin{0.0f, 0.5f, 0.0f};
 };

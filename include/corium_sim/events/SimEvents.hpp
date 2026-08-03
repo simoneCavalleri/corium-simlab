@@ -45,13 +45,28 @@ struct SimResetEvent {
     uint64_t seed = 0;
 };
 
-/// @brief Event emitted to command an agent with linear and angular movement actions.
+/// @brief Event posted to trigger sensor sampling on agent components.
+struct SenseTriggerEvent {
+    uint32_t agentId = 0;
+    uint64_t stepIndex = 0;
+};
+
+/// @brief Event posted when sensors finish sampling and publish perception observations.
+struct AgentPerceptionEvent {
+    uint32_t agentId = 0;
+    uint64_t stepIndex = 0;
+    std::vector<float> observations{};
+};
+
+/// @brief Event emitted to command an agent with linear and angular movement actions or raw action vector.
 struct AgentActionCommand {
     uint32_t agentId = 0;
     float moveForward = 0.0f; // Linear velocity forward/backward
     float turnYaw = 0.0f;     // Angular velocity yaw
     float moveUp = 0.0f;      // Vertical velocity
     bool resetEpisode = false;
+    uint64_t stepIndex = 0;
+    std::vector<float> actions{};
 };
 
 /// @brief Zero-heap event emitted on each simulation step containing agent state, observations, and rewards.
@@ -83,6 +98,22 @@ struct AgentJointCommand {
     float targetVelocity = 0.0f;
 };
 
+/// @brief Telemetry event posted when a sensor samples observations.
+struct SensorSampleEvent {
+    std::string sensorName{};
+    std::string sensorType{};
+    uint64_t stepIndex = 0;
+    std::vector<float> observations{};
+};
+
+/// @brief Telemetry event posted when an actuator applies an action vector.
+struct ActuatorAppliedEvent {
+    std::string actuatorName{};
+    std::string actuatorType{};
+    uint64_t stepIndex = 0;
+    std::vector<float> actions{};
+};
+
 /// @brief Combined default variant list of core Corium events, UI events, and Simulation events.
 using DefaultSimEvents = std::variant<
     corium::QuitEvent,
@@ -110,10 +141,14 @@ using DefaultSimEvents = std::variant<
     CameraUpdateEvent,
     SimStepEvent,
     SimResetEvent,
+    SenseTriggerEvent,
+    AgentPerceptionEvent,
     AgentActionCommand,
     AgentObservationEvent,
     SensorFrameEvent,
     AgentJointCommand,
+    SensorSampleEvent,
+    ActuatorAppliedEvent,
     corium::logging::LogEvent
 >;
 

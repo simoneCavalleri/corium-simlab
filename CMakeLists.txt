@@ -13,7 +13,11 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # Option to specify local Corium path
-set(CORIUM_LOCAL_PATH "" CACHE PATH "Path to local Corium repository")
+if(NOT CORIUM_LOCAL_PATH AND EXISTS "/home/simone/dev/github/corium")
+    set(CORIUM_LOCAL_PATH "/home/simone/dev/github/corium" CACHE PATH "Path to local Corium repository")
+else()
+    set(CORIUM_LOCAL_PATH "" CACHE PATH "Path to local Corium repository")
+endif()
 
 include(FetchContent)
 

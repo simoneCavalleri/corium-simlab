@@ -37,6 +37,9 @@ public:
     /// @brief Add entity to scene.
     void addEntity(SimEntity entity);
 
+    /// @brief Pre-reserve capacity for scene entities vector to prevent reallocations.
+    void reserveEntities(std::size_t capacity) { _entities.reserve(capacity); }
+
     /// @brief Add articulated joint to scene.
     void addJoint(kinematics::SimJoint joint);
 
