@@ -75,6 +75,9 @@ public:
     float maxDistance = 20.0f;
     float fovDegrees = 180.0f;
     math::Vec3 mountOffset{0.0f, 0.5f, 0.0f};
+    bool enableVisualization = true;
+
+    [[nodiscard]] const std::vector<math::Vec3>& hitPoints() const noexcept { return _hitPoints; }
 
     [[nodiscard]] std::span<const float> sample(
         const scene::SimEntity& entity,
@@ -82,6 +85,12 @@ public:
         renderer::WebGpuBackend* gpuBackend = nullptr
     ) noexcept
     {
+        _hitPoints.resize(RayCount);
+        math::Vec3 origin = entity.position + mountOffset;
+        float startAngle = -fovDegrees * 0.5f * math::DEG2RAD;
+        float angleStep = (RayCount > 1) ? (fovDegrees * math::DEG2RAD / static_cast<float>(RayCount)) : 0.0f;
+        float yawRad = entity.rotation.y * math::DEG2RAD;
+
         // Use GPU offscreen depth pass when GPU backend is available
         if (gpuBackend && gpuBackend->isInitialized()) {
             if (!_target.isValid) {
@@ -98,32 +107,60 @@ public:
             if (pixels.size() >= RayCount * 4) {
                 for (std::size_t i = 0; i < RayCount; ++i) {
                     float r = static_cast<float>(pixels[i * 4]) / 255.0f;
-                    _distances[i] = r * maxDistance;
+                    float dist = r * maxDistance;
+                    _distances[i] = dist;
+
+                    float rayAngle = yawRad + startAngle + static_cast<float>(i) * angleStep;
+                    math::Vec3 dir{std::sin(rayAngle), 0.0f, std::cos(rayAngle)};
+                    _hitPoints[i] = origin + dir * dist;
                 }
+                updateSceneVisualization(scene);
                 return std::span<const float>(_distances.data(), RayCount);
             }
         }
 
         // CPU Raycast fallback if GPU backend is null or uninitialized
-        math::Vec3 origin = entity.position + mountOffset;
-        float startAngle = -fovDegrees * 0.5f * math::DEG2RAD;
-        float angleStep = (RayCount > 1) ? (fovDegrees * math::DEG2RAD / static_cast<float>(RayCount)) : 0.0f;
-        float yawRad = entity.rotation.y * math::DEG2RAD;
-
         for (std::size_t i = 0; i < RayCount; ++i) {
             float rayAngle = yawRad + startAngle + static_cast<float>(i) * angleStep;
             math::Vec3 dir{std::sin(rayAngle), 0.0f, std::cos(rayAngle)};
 
             auto hit = physics::Raycast::castRay(scene, origin, dir, maxDistance);
-            _distances[i] = hit.hit ? hit.distance : maxDistance;
+            float dist = hit.hit ? hit.distance : maxDistance;
+            _distances[i] = dist;
+            _hitPoints[i] = origin + dir * dist;
         }
+
+        updateSceneVisualization(scene);
         return std::span<const float>(_distances.data(), RayCount);
     }
 
 private:
+    void updateSceneVisualization(const scene::SimScene& scene) noexcept
+    {
+        if (!enableVisualization) return;
+        auto& mutableScene = const_cast<scene::SimScene&>(scene);
+        std::size_t stride = std::max<std::size_t>(1, RayCount / 45); // Limit density for smooth performance
+
+        for (std::size_t i = 0; i < RayCount; i += stride) {
+            std::string markerName = "_lidar_hit_" + std::to_string(i);
+            if (auto* marker = mutableScene.findEntity(markerName)) {
+                marker->position = _hitPoints[i];
+            } else {
+                mutableScene.addEntity(scene::SimEntity{
+                    .name = markerName,
+                    .material = renderer::Material::Metallic({0.1f, 0.95f, 0.2f, 1.0f}, 0.1f),
+                    .position = _hitPoints[i],
+                    .scale = {0.12f, 0.12f, 0.12f},
+                    .isStatic = false
+                });
+            }
+        }
+    }
+
     renderer::SensorCamera _sensorCamera{static_cast<uint32_t>(RayCount), 1, 180.0f};
     renderer::OffscreenTarget _target{};
     std::array<float, RayCount> _distances{};
+    std::vector<math::Vec3> _hitPoints{};
 };
 
 } // namespace corium_sim::agent::sensors
