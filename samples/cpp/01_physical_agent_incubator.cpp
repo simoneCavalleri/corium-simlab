@@ -18,49 +18,60 @@ using namespace corium_sim::scene;
 // =============================================================================
 // Agent Goal-Seeking & Obstacle Avoidance Policy (PolicyConcept)
 // =============================================================================
+/// @brief Goal-seeking policy for differential-drive AMR.
+/// Uses posX, posZ, yaw, and minimum LiDAR clearance to navigate to goal
+/// while avoiding obstacles.
 class AmrGoalSeekingPolicy {
 public:
     AmrGoalSeekingPolicy(float targetX, float targetZ)
         : _targetX(targetX), _targetZ(targetZ) {}
 
-    /// @brief Plan linear and angular movement action based on fused IMU + LiDAR observations.
+    /// @brief Plan linear/angular velocity from [posX, posZ, yawDeg, minLidar] observation.
     template <typename ObservationBuffer>
-    [[nodiscard]] inline std::array<float, 2> plan(const ObservationBuffer& fusedObs) noexcept
+    [[nodiscard]] inline std::array<float, 2> plan(const ObservationBuffer& obs) noexcept
     {
         std::array<float, 2> action{0.0f, 0.0f};
 
-        float posX = fusedObs[0];
-        float posZ = fusedObs[1];
-        float minLidarDist = fusedObs[2];
+        float posX        = obs[0]; // World X position
+        float posZ        = obs[1]; // World Z position
+        float agentYaw    = obs[2]; // Agent heading (degrees, world frame)
+        float minLidar    = obs[3]; // Minimum obstacle clearance (meters)
 
         float dx = _targetX - posX;
         float dz = _targetZ - posZ;
-        float distToGoal = std::sqrt(dx * dx + dz * dz);
+        float dist = std::sqrt(dx * dx + dz * dz);
 
-        // Angle towards target goal
-        float targetAngle = std::atan2(dx, dz); // Radians
+        if (dist < 0.6f) {
+            // Goal reached — stop
+            return {0.0f, 0.0f};
+        }
 
-        if (distToGoal < 0.6f) {
-            // Target Reached: Stop agent
-            action[0] = 0.0f; // Linear velocity v = 0
-            action[1] = 0.0f; // Angular velocity w = 0
-        } else if (minLidarDist < 1.5f) {
-            // Obstacle Ahead: Slow down and steer away
+        // Desired heading toward goal (world frame, degrees)
+        float desiredYaw = std::atan2(dx, dz) * RAD2DEG;
+
+        // Relative heading error [-180, +180] degrees
+        float angleError = desiredYaw - agentYaw;
+        while (angleError >  180.0f) angleError -= 360.0f;
+        while (angleError < -180.0f) angleError += 360.0f;
+
+        if (minLidar < 1.5f) {
+            // Obstacle ahead: slow down and steer away
             action[0] = 0.3f;
-            action[1] = 45.0f; // Turn right at 45 deg/sec
+            action[1] = 45.0f;
         } else {
-            // Clear Path: Drive towards goal
-            action[0] = std::clamp(distToGoal * 0.8f, 0.4f, 1.8f);
-            action[1] = std::clamp(targetAngle * RAD2DEG * 1.5f, -60.0f, 60.0f);
+            // Clear path: drive toward goal
+            action[0] = std::clamp(dist * 0.8f, 0.4f, 1.8f);
+            action[1] = std::clamp(angleError * 1.5f, -60.0f, 60.0f);
         }
 
         return action;
     }
 
 private:
-    float _targetX = 4.0f;
-    float _targetZ = -2.0f;
+    float _targetX;
+    float _targetZ;
 };
+
 
 int main(int argc, char** argv)
 {
@@ -108,17 +119,22 @@ int main(int argc, char** argv)
                 return scan;
             })
         )
-        // Pillar 4: Perception Chain (Fuse IMU PosX, PosZ, and Minimum LiDAR obstacle clearance)
-        .withPerceptionChain<3>([](const auto& rawObs) {
-            std::array<float, 3> fused{};
-            fused[0] = rawObs[0]; // IMU PosX
-            fused[1] = rawObs[2]; // IMU PosZ
+        // Pillar 4: Perception Chain — fuse [posX, posZ, yawDeg, minLidarDist]
+        // ImuSensor layout: [0]=pos.x [1]=pos.y [2]=pos.z
+        //                   [3]=vel.x [4]=vel.y [5]=vel.z
+        //                   [6]=rot.x [7]=rot.y(yaw) [8]=rot.z
+        // LiDAR (180 rays) starts at index 9.
+        .withPerceptionChain<4>([](const auto& rawObs) {
+            std::array<float, 4> fused{};
+            fused[0] = rawObs[0]; // IMU pos.x
+            fused[1] = rawObs[2]; // IMU pos.z
+            fused[2] = rawObs[7]; // IMU rot.y = yaw (degrees)
 
-            float minLidarDist = 20.0f;
-            for (std::size_t i = 12; i < 12 + 180; ++i) {
-                minLidarDist = std::min(minLidarDist, rawObs[i]);
+            float minLidar = 20.0f;
+            for (std::size_t i = 9; i < 9 + 180; ++i) {
+                minLidar = std::min(minLidar, rawObs[i]);
             }
-            fused[2] = minLidarDist;
+            fused[3] = minLidar;
             return fused;
         })
         // Pillar 5: Actuators (Differential Mobile Drive: v, w)
