@@ -1,8 +1,8 @@
 #pragma once
 
-#include <vector>
 #include <string>
-#include <optional>
+#include <unordered_map>
+#include <vector>
 
 #if __has_include(<webgpu/webgpu.h>)
 #include <webgpu/webgpu.h>
@@ -64,8 +64,12 @@ public:
     [[nodiscard]] std::size_t jointCount() const noexcept { return _joints.size(); }
 
 private:
-    std::vector<SimEntity> _entities{};
-    std::vector<kinematics::SimJoint> _joints{};
+    std::vector<SimEntity>              _entities{};
+    std::vector<kinematics::SimJoint>   _joints{};
+
+    // O(1) name → index lookup caches (kept in sync with _entities / _joints)
+    std::unordered_map<std::string, std::size_t> _entityIndex{};
+    std::unordered_map<std::string, std::size_t> _jointIndex{};
 };
 
 } // namespace corium_sim::scene

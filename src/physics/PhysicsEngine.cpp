@@ -10,6 +10,11 @@ void PhysicsEngine::step(scene::SimScene& scene, float deltaTime) noexcept
 {
     if (deltaTime <= 0.0f) return;
 
+    // Pre-compute damping factors once per frame (constants across all entities).
+    // std::pow is expensive (~20 ns); calling it O(N) times per step was a hot-loop bug.
+    const float lDampFactor = std::pow(_linearDamping,  deltaTime * 60.0f);
+    const float aDampFactor = std::pow(_angularDamping, deltaTime * 60.0f);
+
     for (auto& entity : scene.entities()) {
         if (!entity.hasPhysics || entity.isStatic) continue;
 
@@ -17,14 +22,11 @@ void PhysicsEngine::step(scene::SimScene& scene, float deltaTime) noexcept
         entity.velocity += _gravity * deltaTime;
 
         // 2. Integrate position & rotation
-        entity.position += entity.velocity * deltaTime;
+        entity.position += entity.velocity        * deltaTime;
         entity.rotation += entity.angularVelocity * deltaTime;
 
-        // 3. Apply linear & angular damping (friction)
-        float lDampFactor = std::pow(_linearDamping, deltaTime * 60.0f);
-        float aDampFactor = std::pow(_angularDamping, deltaTime * 60.0f);
-
-        entity.velocity *= lDampFactor;
+        // 3. Apply linear & angular damping (pre-computed above)
+        entity.velocity        *= lDampFactor;
         entity.angularVelocity *= aDampFactor;
 
         // 4. Ground plane collision resolution

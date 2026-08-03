@@ -6,6 +6,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Default to Release build for maximum runtime performance
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (Release/Debug/RelWithDebInfo)" FORCE)
+    message(STATUS "No CMAKE_BUILD_TYPE set — defaulting to Release")
+endif()
+
 # Option to specify local Corium path
 set(CORIUM_LOCAL_PATH "" CACHE PATH "Path to local Corium repository")
 

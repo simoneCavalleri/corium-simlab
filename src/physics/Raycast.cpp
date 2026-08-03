@@ -88,21 +88,50 @@ std::vector<RaycastHit> Raycast::castLidarScan(
     std::vector<RaycastHit> scanResults;
     scanResults.reserve(numRays);
 
-    float startAngle = - (fovDegrees * 0.5f) * DEG2RAD;
-    float angleStep = (fovDegrees * DEG2RAD) / static_cast<float>(numRays > 1 ? numRays : 1);
+    // Pre-build world AABB list once — avoids recomputing scaledMin/Max
+    // N_entities times per ray (previously O(numRays × N_entities) multiplications).
+    const auto& entities = scene.entities();
+    struct CachedAABB { Vec3 min, max; bool valid; };
+    std::vector<CachedAABB> aabbs;
+    aabbs.reserve(entities.size());
+    for (const auto& entity : entities) {
+        Vec3 sMin{entity.localBounds.min.x * entity.scale.x,
+                  entity.localBounds.min.y * entity.scale.y,
+                  entity.localBounds.min.z * entity.scale.z};
+        Vec3 sMax{entity.localBounds.max.x * entity.scale.x,
+                  entity.localBounds.max.y * entity.scale.y,
+                  entity.localBounds.max.z * entity.scale.z};
+        aabbs.push_back({entity.position + sMin, entity.position + sMax, true});
+    }
 
-    float baseYaw = std::atan2(forwardDir.x, forwardDir.z);
+    float startAngle = -(fovDegrees * 0.5f) * DEG2RAD;
+    float angleStep  = (fovDegrees * DEG2RAD) / static_cast<float>(numRays > 1 ? numRays : 1);
+    float baseYaw    = std::atan2(forwardDir.x, forwardDir.z);
 
     for (uint32_t i = 0; i < numRays; ++i) {
         float currentAngle = baseYaw + startAngle + (angleStep * static_cast<float>(i));
-        Vec3 rayDir{
-            std::sin(currentAngle),
-            0.0f,
-            std::cos(currentAngle)
-        };
+        Vec3 rayDir{std::sin(currentAngle), 0.0f, std::cos(currentAngle)};
+        Vec3 dirNorm = rayDir.normalized();
 
-        RaycastHit hit = castRay(scene, origin, rayDir, maxDistance);
-        scanResults.push_back(hit);
+        // Inline ray-AABB test against pre-built cache (no per-ray entity loop)
+        RaycastHit bestHit{};
+        bestHit.distance = maxDistance;
+
+        for (std::size_t j = 0; j < aabbs.size(); ++j) {
+            float t = 0.0f;
+            if (intersectAABB(origin, dirNorm, aabbs[j].min, aabbs[j].max, maxDistance, t)) {
+                if (t > 0.001f && t < bestHit.distance) {
+                    bestHit.hit      = true;
+                    bestHit.distance = t;
+                    bestHit.point    = origin + (dirNorm * t);
+                    bestHit.entityName = entities[j].name;
+                    Vec3 center = (aabbs[j].min + aabbs[j].max) * 0.5f;
+                    bestHit.normal = (bestHit.point - center).normalized();
+                }
+            }
+        }
+
+        scanResults.push_back(bestHit);
     }
 
     return scanResults;

@@ -31,11 +31,13 @@ SceneBuilder SimScene::builder(WGPUDevice device, WGPUQueue queue)
 
 void SimScene::addEntity(SimEntity entity)
 {
+    _entityIndex[entity.name] = _entities.size();
     _entities.push_back(std::move(entity));
 }
 
 void SimScene::addJoint(kinematics::SimJoint joint)
 {
+    _jointIndex[joint.name] = _joints.size();
     _joints.push_back(std::move(joint));
 }
 
@@ -51,8 +53,9 @@ void SimScene::destroy() noexcept
 
 SimEntity* SimScene::findEntity(const std::string& name) noexcept
 {
-    for (auto& entity : _entities) {
-        if (entity.name == name) return &entity;
+    auto it = _entityIndex.find(name);
+    if (it != _entityIndex.end() && it->second < _entities.size()) {
+        return &_entities[it->second];
     }
     return nullptr;
 }
@@ -67,8 +70,9 @@ SimEntity* SimScene::getEntity(uint32_t id) noexcept
 
 kinematics::SimJoint* SimScene::findJoint(const std::string& name) noexcept
 {
-    for (auto& joint : _joints) {
-        if (joint.name == name) return &joint;
+    auto it = _jointIndex.find(name);
+    if (it != _jointIndex.end() && it->second < _joints.size()) {
+        return &_joints[it->second];
     }
     return nullptr;
 }
