@@ -1,6 +1,11 @@
+// =============================================================================
+// Corium SimLab Sample #03 — Multi-Agent Warehouse Logistics Swarm Navigation
+// =============================================================================
+
 #include <iostream>
 #include <iomanip>
 #include <vector>
+#include <cmath>
 #include "corium_sim/SimLab.hpp"
 
 using namespace corium_sim;
@@ -11,14 +16,36 @@ using namespace corium_sim::math;
 using namespace corium_sim::renderer;
 using namespace corium_sim::scene;
 
-// Simple Dummy Policy for Swarm Agents
-class SwarmFollowerPolicy {
+// =============================================================================
+// Swarm Leader Navigation Policy (PolicyConcept)
+// =============================================================================
+class SwarmLeaderPolicy {
 public:
+    SwarmLeaderPolicy(float targetX, float targetZ)
+        : _targetX(targetX), _targetZ(targetZ) {}
+
     template <typename Obs>
-    [[nodiscard]] inline std::array<float, 2> plan([[maybe_unused]] const Obs& obs) noexcept
+    [[nodiscard]] inline std::array<float, 2> plan(const Obs& obs) noexcept
     {
-        return {0.5f, 0.05f};
+        std::array<float, 2> action{0.0f, 0.0f};
+        float posX = obs[0];
+        float posZ = obs[2];
+
+        float dx = _targetX - posX;
+        float dz = _targetZ - posZ;
+        float dist = std::sqrt(dx * dx + dz * dz);
+
+        if (dist > 0.5f) {
+            action[0] = std::clamp(dist * 0.5f, 0.4f, 1.5f); // Linear velocity v
+            action[1] = std::clamp(std::atan2(dx, dz) * RAD2DEG * 1.2f, -40.0f, 40.0f); // Angular velocity w
+        }
+
+        return action;
     }
+
+private:
+    float _targetX = 0.0f;
+    float _targetZ = 12.0f;
 };
 
 int main(int argc, char** argv)
@@ -27,8 +54,8 @@ int main(int argc, char** argv)
     (void)argv;
 
     std::cout << "=========================================================================\n";
-    std::cout << " Corium SimLab — 3D WebGPU Multi-Agent Swarm Incubator\n";
-    std::cout << " Features: 3D Swarm Navigation | Sim-to-Real Randomization | 60 FPS Visuals\n";
+    std::cout << " Corium SimLab — Sample #03: Multi-Agent Warehouse Logistics Swarm\n";
+    std::cout << " Features: Swarm Navigation | Formation Control | 3D WebGPU Visuals\n";
     std::cout << "=========================================================================\n\n";
 
     SimRuntime runtime;
@@ -37,46 +64,52 @@ int main(int argc, char** argv)
     runtime.initialize(app);
 
     // -------------------------------------------------------------------------
-    // 1. DEFINE REUSABLE AGENT SPECIFICATION BLUEPRINT ONCE
+    // 1. DEFINE REUSABLE AMR SWARM AGENT BLUEPRINT
     // -------------------------------------------------------------------------
-    std::cout << "[Step 1] Constructing Reusable AMR Swarm AgentSpec Blueprint...\n";
+    std::cout << "[Step 1] Constructing Reusable Swarm AMR AgentSpec Blueprint...\n";
 
     auto amrSwarmSpec = makeAgentSpec()
-        .withModel(SimEntity{.name = "amr_base", .mass = 12.0f})
+        .withModel(SimEntity{.name = "amr_leader", .mass = 12.0f})
         .withSensors(
-            sensors::ImuSensor{},
-            sensors::RaycastLidarSensor<360>{}
+            sensors::ImuSensor{}
         )
         .withoutPerceptionChain()
         .withActuators(
             actuators::DifferentialDriveActuator{}
         )
-        .withPolicy(SwarmFollowerPolicy{});
+        .withPolicy(SwarmLeaderPolicy{0.0f, 12.0f});
 
     // -------------------------------------------------------------------------
-    // 2. CONSTRUCT 3D WEBGPU MULTI-AGENT SCENE & SPAWN SWARM
+    // 2. CONSTRUCT 3D SCENE & SPAWN SWARM
     // -------------------------------------------------------------------------
     std::cout << "[Step 2] Constructing 3D Scene & Spawning Swarm AMRs...\n";
 
     auto incubator = makeIncubator<KinematicPhysicsEngine>()
         .withEnvironment([](SimScene& scene) {
-            scene.addEntity(SimEntity{.name = "user_ground", .isStatic = true});
+            // Warehouse Floor Grid
+            scene.addEntity(SimEntity{.name = "user_ground", .shape = EntityShape::PlaneGrid, .isStatic = true});
+
+            // Follower AMR 1 (Left Wing)
             scene.addEntity(SimEntity{
                 .name = "amr_follower_1",
                 .material = Material::Metallic({0.2f, 0.6f, 0.9f, 1.0f}, 0.2f),
-                .position = {-2.0f, 0.5f, -1.0f},
+                .position = {-2.5f, 0.5f, -2.0f},
                 .scale = {1.0f, 0.8f, 1.0f}
             });
+
+            // Follower AMR 2 (Right Wing)
             scene.addEntity(SimEntity{
                 .name = "amr_follower_2",
                 .material = Material::Metallic({0.2f, 0.6f, 0.9f, 1.0f}, 0.2f),
-                .position = {2.0f, 0.5f, -1.0f},
+                .position = {2.5f, 0.5f, -2.0f},
                 .scale = {1.0f, 0.8f, 1.0f}
             });
+
+            // Warehouse Target Waypoint Station
             scene.addEntity(SimEntity{
                 .name = "target_waypoint",
                 .material = Material::Metallic({0.1f, 0.9f, 0.2f, 1.0f}, 0.1f),
-                .position = {0.0f, 0.75f, 10.0f},
+                .position = {0.0f, 0.75f, 12.0f},
                 .scale = {1.5f, 1.5f, 1.5f},
                 .isStatic = true
             });
@@ -84,27 +117,40 @@ int main(int argc, char** argv)
         .spawnAgent("amr_leader", std::move(amrSwarmSpec), Vec3{0.0f, 0.5f, 0.0f})
         .withRewardPolicy(
             RewardBuilder{}
+                .withTarget({0.0f, 0.75f, 12.0f})
+                .withGoalThreshold(0.5f)
                 .addTerm<DistanceToGoalPenalty>(1.0f)
-                .addTerm<GoalReachedBonus>(200.0f)
+                .addTerm<GoalReachedBonus>(200.0f, 0.5f)
         );
 
     auto incubatorPtr = std::make_shared<decltype(incubator)>(std::move(incubator));
 
-    app.onStep([incubatorPtr](SimLabApp& appInstance, float dt) {
-        incubatorPtr->step(dt);
-
-        if (auto* follower1 = appInstance.scene().findEntity("amr_follower_1")) {
-            follower1->velocity.z = 0.6f;
-            follower1->rotation.y += 10.0f * dt;
-        }
-        if (auto* follower2 = appInstance.scene().findEntity("amr_follower_2")) {
-            follower2->velocity.z = 0.8f;
-            follower2->rotation.y -= 15.0f * dt;
-        }
-    });
-
+    // Connect shared 3D scene to generic WebGPU App
     app.setScene(incubatorPtr->scenePtr());
 
+    // Step callback updating leader navigation and follower formation control
+    app.onStep([incubatorPtr](SimLabApp& app, float dt) {
+        auto result = incubatorPtr->step(dt);
+        (void)result;
+
+        // Leader AMR position
+        Vec3 leaderPos{0.0f, 0.5f, 0.0f};
+        if (auto* leader = app.scene().findEntity("amr_leader")) {
+            leaderPos = leader->position;
+        }
+
+        // Maintain V-shape formation for follower AMRs
+        if (auto* follower1 = app.scene().findEntity("amr_follower_1")) {
+            Vec3 targetFollower1Pos = leaderPos + Vec3{-2.5f, 0.0f, -2.0f};
+            follower1->position.x += (targetFollower1Pos.x - follower1->position.x) * 3.0f * dt;
+            follower1->position.z += (targetFollower1Pos.z - follower1->position.z) * 3.0f * dt;
+        }
+        if (auto* follower2 = app.scene().findEntity("amr_follower_2")) {
+            Vec3 targetFollower2Pos = leaderPos + Vec3{2.5f, 0.0f, -2.0f};
+            follower2->position.x += (targetFollower2Pos.x - follower2->position.x) * 3.0f * dt;
+            follower2->position.z += (targetFollower2Pos.z - follower2->position.z) * 3.0f * dt;
+        }
+    });
 
     std::cout << "  - 3D Multi-Agent Swarm Environment initialized successfully!\n\n";
 

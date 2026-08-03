@@ -192,10 +192,12 @@ PYBIND11_MODULE(corium_sim_py, m) {
         }, py::arg("move_forward") = 0.0f, py::arg("turn_yaw") = 0.0f, py::arg("move_up") = 0.0f,
         "Apply movement action to the agent: forward/backward, yaw rotation, vertical.")
         .def("sim_step", [](SimLabApp& self, float dt) {
-            self.physics().step(self.scene(), dt);
+            // Note: physics stepping is handled by SimEnvironment / CoriumEnv.
+            // SimLabApp is a pure rendering shell — only kinematics (joint FK) is advanced here.
             self.jointKinematics().updateKinematics(self.scene(), dt);
         }, py::arg("dt") = 0.016667f,
-        "Advance physics and kinematics simulation by one timestep.")
+        "Advance joint kinematics simulation by one timestep (physics is owned by CoriumEnv).")
+
         .def("solve_ik", [](SimLabApp& self, const std::string& endEffectorName, float targetX, float targetY, float targetZ, uint32_t maxIterations, float tolerance) {
             return self.jointKinematics().solveIK(self.scene(), endEffectorName, Vec3{targetX, targetY, targetZ}, maxIterations, tolerance);
         }, py::arg("end_effector_name"), py::arg("target_x"), py::arg("target_y"), py::arg("target_z"), py::arg("max_iterations") = 50, py::arg("tolerance") = 0.01f,

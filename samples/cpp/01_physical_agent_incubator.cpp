@@ -1,3 +1,7 @@
+// =============================================================================
+// Corium SimLab Sample #01 — Autonomous Mobile Robot (AMR) Navigation & Raycasting
+// =============================================================================
+
 #include <iostream>
 #include <iomanip>
 #include <cmath>
@@ -12,30 +16,43 @@ using namespace corium_sim::renderer;
 using namespace corium_sim::scene;
 
 // =============================================================================
-// User Planning Policy implementing PolicyConcept
+// Agent Goal-Seeking & Obstacle Avoidance Policy (PolicyConcept)
 // =============================================================================
-class UserPlannerPolicy {
+class AmrGoalSeekingPolicy {
 public:
-    UserPlannerPolicy(float targetX, float targetZ)
+    AmrGoalSeekingPolicy(float targetX, float targetZ)
         : _targetX(targetX), _targetZ(targetZ) {}
 
+    /// @brief Plan linear and angular movement action based on fused IMU + LiDAR observations.
     template <typename ObservationBuffer>
-    [[nodiscard]] inline std::array<float, 8> plan(const ObservationBuffer& fusedObs) noexcept
+    [[nodiscard]] inline std::array<float, 2> plan(const ObservationBuffer& fusedObs) noexcept
     {
-        std::array<float, 8> action{};
+        std::array<float, 2> action{0.0f, 0.0f};
+
         float posX = fusedObs[0];
         float posZ = fusedObs[1];
+        float minLidarDist = fusedObs[2];
 
         float dx = _targetX - posX;
         float dz = _targetZ - posZ;
-        float v = std::clamp(dz * 0.5f, -1.0f, 1.0f);
-        float w = std::clamp(dx * 15.0f, -45.0f, 45.0f);
+        float distToGoal = std::sqrt(dx * dx + dz * dz);
 
-        for (std::size_t j = 0; j < 6; ++j) {
-            action[j] = 0.1f * static_cast<float>(j);
+        // Angle towards target goal
+        float targetAngle = std::atan2(dx, dz); // Radians
+
+        if (distToGoal < 0.6f) {
+            // Target Reached: Stop agent
+            action[0] = 0.0f; // Linear velocity v = 0
+            action[1] = 0.0f; // Angular velocity w = 0
+        } else if (minLidarDist < 1.5f) {
+            // Obstacle Ahead: Slow down and steer away
+            action[0] = 0.3f;
+            action[1] = 45.0f; // Turn right at 45 deg/sec
+        } else {
+            // Clear Path: Drive towards goal
+            action[0] = std::clamp(distToGoal * 0.8f, 0.4f, 1.8f);
+            action[1] = std::clamp(targetAngle * RAD2DEG * 1.5f, -60.0f, 60.0f);
         }
-        action[6] = v;
-        action[7] = w;
 
         return action;
     }
@@ -51,8 +68,8 @@ int main(int argc, char** argv)
     (void)argv;
 
     std::cout << "=========================================================================\n";
-    std::cout << " Corium SimLab — 3D WebGPU Interactive Visual Physical Agent Incubator\n";
-    std::cout << " Features: 3D WebGPU Window | Real-Time LiDAR Raycasting | Visual Camera\n";
+    std::cout << " Corium SimLab — Sample #01: Physical AMR Navigation & Obstacle Avoidance\n";
+    std::cout << " Features: 3D WebGPU Window | Real-Time LiDAR Raycasting | Goal-Seeking Policy\n";
     std::cout << "=========================================================================\n\n";
 
     SimRuntime runtime;
@@ -61,15 +78,20 @@ int main(int argc, char** argv)
     runtime.initialize(app);
 
     // -------------------------------------------------------------------------
-    // 1. DEFINE REUSABLE AGENT SPECIFICATION BLUEPRINT
+    // 1. DEFINE REUSABLE AGENT SPECIFICATION BLUEPRINT (7 Agent-Centric Pillars)
     // -------------------------------------------------------------------------
     std::cout << "[Step 1] Constructing Decoupled AgentSpec Blueprint...\n";
 
     auto amrAgentSpec = makeAgentSpec()
-        .withModel(SimEntity{.name = "amr_robot", .position = {0.0f, 0.5f, 0.0f}, .mass = 15.0f})
+        // Pillar 2: Agent Body Model
+        .withModel(SimEntity{
+            .name = "amr_robot",
+            .position = {0.0f, 0.5f, 0.0f},
+            .mass = 15.0f
+        })
+        // Pillar 3: Onboard Sensors (IMU + 180-Degree Custom LiDAR Raycaster)
         .withSensors(
             sensors::ImuSensor{},
-            sensors::JointEncoderSensor<6>{},
             sensors::makeCustomSensor<180>([](const SimEntity& agent, const SimScene& scene) {
                 std::array<float, 180> scan{};
                 float yawRad = agent.rotation.y * DEG2RAD;
@@ -86,23 +108,25 @@ int main(int argc, char** argv)
                 return scan;
             })
         )
+        // Pillar 4: Perception Chain (Fuse IMU PosX, PosZ, and Minimum LiDAR obstacle clearance)
         .withPerceptionChain<3>([](const auto& rawObs) {
             std::array<float, 3> fused{};
             fused[0] = rawObs[0]; // IMU PosX
             fused[1] = rawObs[2]; // IMU PosZ
 
             float minLidarDist = 20.0f;
-            for (std::size_t i = 21; i < 21 + 180; ++i) {
+            for (std::size_t i = 12; i < 12 + 180; ++i) {
                 minLidarDist = std::min(minLidarDist, rawObs[i]);
             }
             fused[2] = minLidarDist;
             return fused;
         })
+        // Pillar 5: Actuators (Differential Mobile Drive: v, w)
         .withActuators(
-            actuators::JointPositionActuator<6>{},
             actuators::DifferentialDriveActuator{}
         )
-        .withPolicy(UserPlannerPolicy{4.0f, -2.0f});
+        // Pillar 6: Planning Policy
+        .withPolicy(AmrGoalSeekingPolicy{4.0f, -2.0f});
 
     // -------------------------------------------------------------------------
     // 2. CONSTRUCT 3D WEBGPU VISUAL INCUBATOR SCENE & SPAWN AGENT
@@ -110,10 +134,10 @@ int main(int argc, char** argv)
     std::cout << "[Step 2] Constructing 3D WebGPU Visual Scene & Spawning Agent...\n";
 
     auto incubator = makeIncubator<KinematicPhysicsEngine>()
+        // Pillar 1: Environment & 3D Visual Scene Setup
         .withEnvironment([](SimScene& scene) {
             scene.addEntity(SimEntity{.name = "user_ground", .shape = EntityShape::PlaneGrid, .isStatic = true});
             scene.addEntity(SimEntity{
-
                 .name = "target_goal",
                 .material = Material::Metallic({0.95f, 0.15f, 0.15f, 1.0f}, 0.20f),
                 .position = {4.0f, 0.75f, -2.0f},
@@ -129,30 +153,32 @@ int main(int argc, char** argv)
             });
         })
         .spawnAgent("amr_leader", std::move(amrAgentSpec), Vec3{0.0f, 0.5f, 0.0f})
+        // Pillar 7: Reward Policy
         .withRewardPolicy(
             RewardBuilder{}
+                .withTarget({4.0f, 0.75f, -2.0f})
+                .withGoalThreshold(0.6f)
                 .addTerm<DistanceToGoalPenalty>(1.0f)
                 .addTerm<CollisionPenalty>(50.0f)
-                .addTerm<GoalReachedBonus>(200.0f)
+                .addTerm<GoalReachedBonus>(200.0f, 0.6f)
         );
 
     auto incubatorPtr = std::make_shared<decltype(incubator)>(std::move(incubator));
 
-    // Attach incubator step callback to generic SimLabApp
-    app.onStep([incubatorPtr](SimLabApp&, float dt) {
-        incubatorPtr->step(dt);
-    });
-
+    // Connect shared 3D scene to generic WebGPU App
     app.setScene(incubatorPtr->scenePtr());
 
+    // Register high-frequency step callback for real-time WebGPU rendering & active agent navigation
+    app.onStep([incubatorPtr](SimLabApp&, float dt) {
+        auto result = incubatorPtr->step(dt);
+        (void)result;
+    });
 
-
-
-    std::cout << "  - 3D WebGPU Visual Environment set successfully!\n";
+    std::cout << "  - 3D WebGPU Visual Environment initialized successfully!\n";
     std::cout << "  - Interactive 3D Window: Orbit/Pan Camera with WASD & Mouse!\n\n";
 
     // -------------------------------------------------------------------------
-    // 3. RUN 3D INTERACTIVE WEBGPU RENDERING & SIMULATION LOOP (60 FPS)
+    // 3. RUN 3D INTERACTIVE WEBGPU RENDERING & SIMULATION LOOP
     // -------------------------------------------------------------------------
     std::cout << "[Step 3] Launching 3D Interactive WebGPU Graphics Window...\n";
     app.run(runtime);

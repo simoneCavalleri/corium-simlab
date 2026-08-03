@@ -1,140 +1,178 @@
 // =============================================================================
-// Corium SimLab Sample #02 — Realistic Industrial Robotics Workstation & 3-DOF Arm
+// Corium SimLab Sample #02 — Industrial 3-DOF Robot Arm Pick-and-Place Manipulation
 // =============================================================================
 
+#include <iostream>
+#include <iomanip>
+#include <cmath>
 #include "corium_sim/SimLab.hpp"
 #include "corium_sim/scene/SceneBuilder.hpp"
-#include <iostream>
-#include <cmath>
 
 using namespace corium_sim;
+using namespace corium_sim::agent;
+using namespace corium_sim::environment;
+using namespace corium_sim::physics;
 using namespace corium_sim::math;
 using namespace corium_sim::renderer;
-using namespace corium_sim::kinematics;
 using namespace corium_sim::scene;
+using namespace corium_sim::kinematics;
+
+// =============================================================================
+// Industrial Robot Arm Joint Manipulation Policy (PolicyConcept)
+// =============================================================================
+class RobotArmJointControlPolicy {
+public:
+    /// @brief Plan target positions for 3 articulated robotic arm joints (Base, Shoulder, Elbow).
+    template <typename ObservationBuffer>
+    [[nodiscard]] inline std::array<float, 3> plan(const ObservationBuffer& jointObs) noexcept
+    {
+        _simTime += 0.01667f;
+        std::array<float, 3> action{};
+
+        // Smooth sinusoidal trajectory for 3-DOF pick-and-place operation
+        action[0] = std::sin(_simTime * 1.2f) * 0.9f; // Joint Base Yaw rotation
+        action[1] = std::cos(_simTime * 1.8f) * 0.4f; // Joint Shoulder Pitch
+        action[2] = std::sin(_simTime * 2.2f) * 0.5f; // Joint Elbow Pitch
+
+        (void)jointObs;
+        return action;
+    }
+
+private:
+    float _simTime = 0.0f;
+};
 
 int main(int argc, char** argv)
 {
     (void)argc;
     (void)argv;
 
-    std::cout << "=========================================================\n";
-    std::cout << " Corium SimLab Sample #02: Industrial Robotic Manipulator Workstation\n";
-    std::cout << " Features: 3D WebGPU Graphics | URDF Robot Loading | Dynamic Arm Motion\n";
-    std::cout << "=========================================================\n\n";
+    std::cout << "=========================================================================\n";
+    std::cout << " Corium SimLab — Sample #02: Industrial 3-DOF Robot Arm Manipulation\n";
+    std::cout << " Features: 3D WebGPU Graphics | URDF Robot Loading | Joint Position Control\n";
+    std::cout << "=========================================================================\n\n";
 
     SimRuntime runtime;
     SimLabApp app;
 
     runtime.initialize(app);
 
-    auto envScene = SimScene::builder(nullptr, nullptr)
-        // 1. Concrete Factory Floor Grid
-        .addGroundGrid(60.0f, 60.0f, 60)
+    // -------------------------------------------------------------------------
+    // 1. DEFINE REUSABLE AGENT SPECIFICATION BLUEPRINT FOR ROBOTIC MANIPULATOR
+    // -------------------------------------------------------------------------
+    std::cout << "[Step 1] Constructing Decoupled Robotic Arm AgentSpec Blueprint...\n";
 
-        // 2. Heavy Industrial Pedestal Table Workstation
-        .addCube(
-            "workstation_table",
-            Vec3{0.0f, 0.4f, 0.0f},
-            Vec3{3.0f, 0.8f, 2.0f},
-            Vec3{0.0f, 0.0f, 0.0f},
-            Material::Metallic({0.4f, 0.45f, 0.50f, 1.0f}, 0.35f),
-            true // isStatic
+    auto robotArmSpec = makeAgentSpec()
+        // Pillar 2: Agent Model
+        .withModel(SimEntity{
+            .name = "base_link",
+            .position = {0.0f, 0.4f, 0.0f},
+            .isStatic = true
+        })
+        // Pillar 3: Onboard Joint Encoder Sensors
+        .withSensors(
+            sensors::JointEncoderSensor<3>{}
         )
-
-        // 3. Load Robotic Arm Manipulator & Joints from URDF Specification
-        .addURDF("assets/urdf/sample_arm.urdf", Vec3{0.0f, 0.4f, 0.0f})
-
-        // 4. Parallel Two-Finger Gripper End-Effector
-        .addCube(
-            "gripper_finger_l",
-            Vec3{-0.15f, 3.2f, 0.0f},
-            Vec3{0.08f, 0.3f, 0.12f},
-            Vec3{0.0f, 0.0f, 0.0f},
-            Material::Matte({0.2f, 0.2f, 0.25f, 1.0f})
+        // Pillar 4: Perception Chain
+        .withoutPerceptionChain()
+        // Pillar 5: Actuators (3-DOF Joint Position Actuators for URDF Arm)
+        .withActuators(
+            actuators::JointPositionActuator<3>{}
         )
-        .addCube(
-            "gripper_finger_r",
-            Vec3{0.15f, 3.2f, 0.0f},
-            Vec3{0.08f, 0.3f, 0.12f},
-            Vec3{0.0f, 0.0f, 0.0f},
-            Material::Matte({0.2f, 0.2f, 0.25f, 1.0f})
-        )
+        // Pillar 6: Planning Policy (Trajectory & Pick-and-Place Joint Controller)
+        .withPolicy(RobotArmJointControlPolicy{});
 
-        // 5. Additional End-Effector Gripper Joints
-        .addJoint(
-            "joint_gripper_l",
-            "elbow_link",
-            "gripper_finger_l",
-            JointType::Prismatic,
-            Vec3{-0.15f, 0.3f, 0.0f},
-            Vec3{-1.0f, 0.0f, 0.0f},
-            0.0f, 0.1f
-        )
-        .addJoint(
-            "joint_gripper_r",
-            "elbow_link",
-            "gripper_finger_r",
-            JointType::Prismatic,
-            Vec3{0.15f, 0.3f, 0.0f},
-            Vec3{1.0f, 0.0f, 0.0f},
-            0.0f, 0.1f
-        )
+    // -------------------------------------------------------------------------
+    // 2. CONSTRUCT INDUSTRIAL WORKSTATION SCENE & SPAWN ROBOT ARM AGENT
+    // -------------------------------------------------------------------------
+    std::cout << "[Step 2] Constructing Industrial Workstation Scene & Spawning Robot Arm...\n";
 
-        // 6. Workpiece Inspection Platform & Red Metallic Target Block
-        .addCube(
-            "inspection_platform",
-            Vec3{3.5f, 0.5f, -1.5f},
-            Vec3{2.0f, 1.0f, 1.5f},
-            Vec3{0.0f, 0.0f, 0.0f},
-            Material::Metallic({0.5f, 0.52f, 0.55f, 1.0f}, 0.40f),
-            true // isStatic
-        )
-        .addCube(
-            "target_workpiece",
-            Vec3{3.5f, 1.25f, -1.5f},
-            Vec3{0.6f, 0.5f, 0.6f},
-            Vec3{0.0f, 0.0f, 0.0f},
-            Material::Metallic({0.95f, 0.10f, 0.15f, 1.0f}, 0.10f)
-        )
+    auto incubator = makeIncubator<KinematicPhysicsEngine>()
+        // Pillar 1: Environment & 3D Scene Definition
+        .withEnvironment([](SimScene& scene) {
+            // Factory Floor Grid
+            scene.addEntity(SimEntity{.name = "user_ground", .shape = EntityShape::PlaneGrid, .isStatic = true});
 
-        // 7. Industrial Safety Warning Barrier
-        .addCube(
-            "safety_barrier",
-            Vec3{-2.5f, 0.6f, 2.5f},
-            Vec3{3.5f, 1.2f, 0.2f},
-            Vec3{0.0f, 0.0f, 0.0f},
-            Material::Matte({0.95f, 0.80f, 0.05f, 1.0f}),
-            true // isStatic
-        )
-        .build();
+            // Heavy Industrial Pedestal Table Workstation
+            scene.addEntity(SimEntity{
+                .name = "workstation_table",
+                .material = Material::Metallic({0.4f, 0.45f, 0.50f, 1.0f}, 0.35f),
+                .position = {0.0f, 0.4f, 0.0f},
+                .scale = {3.0f, 0.8f, 2.0f},
+                .isStatic = true
+            });
 
-    app.setScene(std::move(envScene));
+            // Load URDF Articulated Robot Arm & Joints
+            UrdfLoader::loadURDF("assets/urdf/sample_arm.urdf", scene, nullptr, nullptr, Vec3{0.0f, 0.4f, 0.0f});
 
-    // Register 3D dynamic joint motion callback for robotic arm manipulation
-    app.onStep([](SimLabApp& appInstance, float dt) {
-        static float simTime = 0.0f;
-        simTime += dt;
 
-        if (auto* jBase = appInstance.scene().findJoint("joint_base")) {
-            jBase->position = std::sin(simTime * 1.2f) * 0.9f;
+            // Parallel Two-Finger Gripper End-Effector
+            scene.addEntity(SimEntity{
+                .name = "gripper_finger_l",
+                .material = Material::Matte({0.2f, 0.2f, 0.25f, 1.0f}),
+                .position = {-0.15f, 3.2f, 0.0f},
+                .scale = {0.08f, 0.3f, 0.12f}
+            });
+            scene.addEntity(SimEntity{
+                .name = "gripper_finger_r",
+                .material = Material::Matte({0.2f, 0.2f, 0.25f, 1.0f}),
+                .position = {0.15f, 3.2f, 0.0f},
+                .scale = {0.08f, 0.3f, 0.12f}
+            });
+
+            // Workpiece Inspection Platform & Red Metallic Target Workpiece
+            scene.addEntity(SimEntity{
+                .name = "inspection_platform",
+                .material = Material::Metallic({0.5f, 0.52f, 0.55f, 1.0f}, 0.40f),
+                .position = {3.5f, 0.5f, -1.5f},
+                .scale = {2.0f, 1.0f, 1.5f},
+                .isStatic = true
+            });
+            scene.addEntity(SimEntity{
+                .name = "target_workpiece",
+                .material = Material::Metallic({0.95f, 0.10f, 0.15f, 1.0f}, 0.10f),
+                .position = {3.5f, 1.25f, -1.5f},
+                .scale = {0.6f, 0.5f, 0.6f}
+            });
+        })
+        .spawnAgent("robot_arm", std::move(robotArmSpec), Vec3{0.0f, 0.4f, 0.0f})
+        // Pillar 7: Reward Policy
+        .withRewardPolicy(
+            RewardBuilder{}
+                .addTerm<DistanceToGoalPenalty>(1.0f)
+                .addTerm<GoalReachedBonus>(100.0f)
+        );
+
+    auto incubatorPtr = std::make_shared<decltype(incubator)>(std::move(incubator));
+
+    // Connect shared 3D scene to generic WebGPU App
+    app.setScene(incubatorPtr->scenePtr());
+
+    // Register high-frequency step callback for real-time WebGPU rendering & joint actuation
+    app.onStep([incubatorPtr](SimLabApp& app, float dt) {
+        // Step incubator (runs policy and joint actuation)
+        auto result = incubatorPtr->step(dt);
+        (void)result;
+
+        // Synchronize target positions from JointPositionActuator to SimJoints
+        auto jointTargets = incubatorPtr->agent().actuators().template getActuator<0>().targetPositions();
+
+        if (jointTargets.size() >= 3) {
+            if (auto* jBase     = app.scene().findJoint("joint_base"))     jBase->position     = jointTargets[0];
+            if (auto* jShoulder = app.scene().findJoint("joint_shoulder")) jShoulder->position = jointTargets[1];
+            if (auto* jElbow    = app.scene().findJoint("joint_elbow"))    jElbow->position    = jointTargets[2];
         }
-        if (auto* jShoulder = appInstance.scene().findJoint("joint_shoulder")) {
-            jShoulder->position = std::cos(simTime * 1.8f) * 0.4f;
-        }
-        if (auto* jElbow = appInstance.scene().findJoint("joint_elbow")) {
-            jElbow->position = std::sin(simTime * 2.2f) * 0.5f;
-        }
-
-
-        appInstance.physics().step(appInstance.scene(), dt);
     });
 
-    std::cout << "[3D Scene] Industrial Workstation & URDF Robotic Arm Loaded Successfully!\n";
-    std::cout << "[Step 3] Launching 3D Interactive WebGPU Graphics Window...\n";
+    std::cout << "  - 3D Industrial Workstation & URDF Robot Arm Initialized Successfully!\n\n";
 
+    // -------------------------------------------------------------------------
+    // 3. RUN 3D INTERACTIVE WEBGPU RENDERING & SIMULATION LOOP
+    // -------------------------------------------------------------------------
+    std::cout << "[Step 3] Launching 3D Interactive WebGPU Graphics Window...\n";
     app.run(runtime);
 
     runtime.shutdown();
+    std::cout << "\n[Incubator] Industrial Robot Arm application shutdown complete.\n";
     return 0;
 }

@@ -9,7 +9,7 @@
 #include "corium_sim/SimConfig.hpp"
 #include "corium_sim/events/SimEvents.hpp"
 #include "corium_sim/kinematics/JointKinematics.hpp"
-#include "corium_sim/physics/PhysicsEngine.hpp"
+
 #include "corium_sim/renderer/Camera.hpp"
 #include "corium_sim/renderer/SensorCamera.hpp"
 #include "corium_sim/renderer/WebGpuBackend.hpp"
@@ -61,7 +61,6 @@ public:
     [[nodiscard]] std::shared_ptr<scene::SimScene> scenePtr() const noexcept { return _scene; }
     [[nodiscard]] scene::SimScene& scene() noexcept { return *_scene; }
     [[nodiscard]] const scene::SimScene& scene() const noexcept { return *_scene; }
-    [[nodiscard]] physics::PhysicsEngine& physics() noexcept { return _physicsEngine; }
     [[nodiscard]] kinematics::JointKinematics& jointKinematics() noexcept { return _jointKinematics; }
 
     [[nodiscard]] SimConfig& config() noexcept { return _config; }
@@ -73,7 +72,6 @@ private:
     renderer::Camera _camera{};
     renderer::SensorCamera _sensorCamera{128, 128, 75.0f};
     std::shared_ptr<scene::SimScene> _scene;
-    physics::PhysicsEngine _physicsEngine{};
     kinematics::JointKinematics _jointKinematics{};
     SimConfig _config{};
     StepCallback _stepCallback{};

@@ -6,6 +6,7 @@
 #include <span>
 #include <vector>
 #include "corium_sim/math/Math.hpp"
+#include "corium_sim/environment/Task.hpp"
 
 namespace corium_sim::environment {
 
@@ -112,9 +113,28 @@ private:
 };
 
 /// @brief Fluent Builder for composing multi-objective RL reward functions.
-class RewardBuilder {
+/// Also implements ITask so it can be used as the canonical reward + termination system.
+class RewardBuilder : public ITask {
 public:
     RewardBuilder() = default;
+
+    // -------------------------------------------------------------------------
+    // Configuration (fluent)
+    // -------------------------------------------------------------------------
+
+    /// @brief Set the 3D goal position used for distance-based reward and done check.
+    RewardBuilder& withTarget(math::Vec3 target) noexcept
+    {
+        _target = target;
+        return *this;
+    }
+
+    /// @brief Set the distance threshold below which the episode is considered done.
+    RewardBuilder& withGoalThreshold(float threshold) noexcept
+    {
+        _goalThreshold = threshold;
+        return *this;
+    }
 
     /// @brief Add a reward term instance to the composition pipeline.
     RewardBuilder& addTerm(std::shared_ptr<IRewardTerm> term)
@@ -133,6 +153,24 @@ public:
         return *this;
     }
 
+    // -------------------------------------------------------------------------
+    // Context update (called by Incubator before computeResult)
+    // -------------------------------------------------------------------------
+
+    /// @brief Push current agent context so ITask::computeResult() has the data it needs.
+    void updateContext(const math::Vec3& agentPos,
+                       std::span<const float> action,
+                       bool isCollided = false) noexcept
+    {
+        _agentPos   = agentPos;
+        _lastAction = std::vector<float>(action.begin(), action.end());
+        _isCollided = isCollided;
+    }
+
+    // -------------------------------------------------------------------------
+    // Direct reward computation (legacy / Python path)
+    // -------------------------------------------------------------------------
+
     /// @brief Evaluate aggregated total scalar reward across all composed terms.
     [[nodiscard]] float computeTotalReward(
         const math::Vec3& agentPos,
@@ -148,8 +186,53 @@ public:
         return total;
     }
 
+    // -------------------------------------------------------------------------
+    // ITask implementation
+    // -------------------------------------------------------------------------
+
+    /// @brief Compute step reward, done flag, and truncated flag from stored context.
+    [[nodiscard]] TaskStepResult computeResult() noexcept override
+    {
+        std::span<const float> actionSpan(_lastAction.data(), _lastAction.size());
+        float reward = computeTotalReward(_agentPos, _target, actionSpan, _isCollided);
+
+        float dist = (_agentPos - _target).length();
+        bool done   = (dist < _goalThreshold);
+
+        return TaskStepResult{
+            .reward    = reward,
+            .done      = done,
+            .truncated = false,
+            .info      = done ? "goal_reached" : ""
+        };
+    }
+
+    /// @brief Reset transient episode state.
+    void reset() noexcept override
+    {
+        _agentPos   = {};
+        _lastAction.clear();
+        _isCollided = false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Accessors
+    // -------------------------------------------------------------------------
+
+    [[nodiscard]] const math::Vec3& target() const noexcept { return _target; }
+    [[nodiscard]] float goalThreshold() const noexcept { return _goalThreshold; }
+
 private:
     std::vector<std::shared_ptr<IRewardTerm>> _terms{};
+
+    // Target configuration
+    math::Vec3 _target{0.0f, 0.0f, 0.0f};
+    float      _goalThreshold = 0.5f;
+
+    // Transient context (set by updateContext each step)
+    math::Vec3           _agentPos{};
+    std::vector<float>   _lastAction{};
+    bool                 _isCollided = false;
 };
 
 } // namespace corium_sim::environment

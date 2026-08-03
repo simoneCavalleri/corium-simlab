@@ -16,7 +16,7 @@
 
 namespace corium_sim::agent {
 
-/// @brief Finalized Incubator Instance containing Environment, Physical Agent(s), Policy, and Reward System.
+/// @brief Finalized Incubator Instance containing Environment, Physical Agent(s), Policy, and Reward/Task System.
 template <
     physics::PhysicsBackend PhysicsEngineType,
     typename AgentSpecType
@@ -48,34 +48,47 @@ public:
     [[nodiscard]] environment::RewardBuilder& rewardEngine() noexcept { return _rewardEngine; }
     [[nodiscard]] const environment::RewardBuilder& rewardEngine() const noexcept { return _rewardEngine; }
 
-    /// @brief Execute a single high-frequency control step: Perception -> Policy -> Action -> Physics -> Reward.
-    /// @return Scalar reward computed from reward policy.
-    float step(float dt = 0.01667f) noexcept
+    // -------------------------------------------------------------------------
+    // Main control loop step
+    // -------------------------------------------------------------------------
+
+    /// @brief Execute a single high-frequency control step:
+    ///        Perception → Policy → Action → Physics → Reward + Done check.
+    /// @return TaskStepResult containing reward, done, truncated flags and info string.
+    [[nodiscard]] environment::TaskStepResult step(float dt = 0.01667f) noexcept
     {
+        // 1. Sense
         auto obs = _agent.observe(_env.scene());
+
+        // 2. Plan
         auto action = _policy.plan(obs);
+
+        // 3. Actuate
         _agent.actuate(action);
 
+        // 4. Write velocity/angular velocity into the shared scene entity
         if (auto* sceneEntity = _env.scene().findEntity(_agent.body().name)) {
-            sceneEntity->velocity = _agent.body().velocity;
+            sceneEntity->velocity        = _agent.body().velocity;
             sceneEntity->angularVelocity = _agent.body().angularVelocity;
         }
 
+        // 5. Physics step (authoritative — only here, not in SimLabApp)
         _env.step(dt);
 
+        // 6. Read back integrated position/rotation from physics
         if (auto* sceneEntity = _env.scene().findEntity(_agent.body().name)) {
-            _agent.body().position = sceneEntity->position;
-            _agent.body().rotation = sceneEntity->rotation;
-            _agent.body().velocity = sceneEntity->velocity;
+            _agent.body().position        = sceneEntity->position;
+            _agent.body().rotation        = sceneEntity->rotation;
+            _agent.body().velocity        = sceneEntity->velocity;
             _agent.body().angularVelocity = sceneEntity->angularVelocity;
         }
 
-        math::Vec3 targetPos{4.0f, 0.75f, -2.0f};
-        return _rewardEngine.computeTotalReward(_agent.body().position, targetPos, action);
+        // 7. Reward + termination via unified RewardBuilder / ITask
+        std::span<const float> actionSpan(action.data(), action.size());
+        _rewardEngine.updateContext(_agent.body().position, actionSpan, /*isCollided=*/false);
+
+        return _rewardEngine.computeResult();
     }
-
-
-
 
 private:
     environment::SimEnvironment<PhysicsEngineType> _env;
@@ -83,6 +96,10 @@ private:
     typename AgentSpecType::Policy _policy;
     environment::RewardBuilder _rewardEngine;
 };
+
+// =============================================================================
+// Fluent Builder Stages
+// =============================================================================
 
 /// @brief Fluent Builder Stage 3: Attach Reward Policy & Finalize Incubator Assembly.
 template <physics::PhysicsBackend PhysicsEngineType, typename AgentSpecType>
@@ -94,15 +111,18 @@ public:
         typename AgentSpecType::Policy policy
     ) : _env(std::move(env)), _agent(std::move(agent)), _policy(std::move(policy)) {}
 
-    /// @brief Attach composable reward policy engine.
+    /// @brief Attach composable reward / task engine and finalize.
     auto withRewardPolicy(environment::RewardBuilder rewardEngine)
     {
+        // Register as the canonical ITask so SimEnvironment::evaluateTask() also works.
+        auto rewardPtr = std::make_shared<environment::RewardBuilder>(std::move(rewardEngine));
+        _env.setTask(rewardPtr);
         return IncubatorCompleted<PhysicsEngineType, AgentSpecType>(
-            std::move(_env), std::move(_agent), std::move(_policy), std::move(rewardEngine)
+            std::move(_env), std::move(_agent), std::move(_policy), std::move(*rewardPtr)
         );
     }
 
-    /// @brief Finalize incubator without specific reward terms.
+    /// @brief Finalize incubator without a specific reward policy.
     auto build()
     {
         return IncubatorCompleted<PhysicsEngineType, AgentSpecType>(
@@ -128,14 +148,14 @@ public:
     auto spawnAgent(const std::string& name, AgentSpecType spec, math::Vec3 initialPosition = {0.0f, 0.5f, 0.0f})
     {
         scene::SimEntity agentBody = std::move(spec.model());
-        agentBody.name = name;
+        agentBody.name     = name;
         agentBody.position = initialPosition;
 
         scene::SimEntity sceneEntity{};
-        sceneEntity.name = name;
-        sceneEntity.position = initialPosition;
-        sceneEntity.mass = agentBody.mass;
-        sceneEntity.scale = agentBody.scale;
+        sceneEntity.name        = name;
+        sceneEntity.position    = initialPosition;
+        sceneEntity.mass        = agentBody.mass;
+        sceneEntity.scale       = agentBody.scale;
         sceneEntity.localBounds = agentBody.localBounds;
 
         _env.scene().addEntity(std::move(sceneEntity));
@@ -147,7 +167,6 @@ public:
             std::move(_env), std::move(agent), std::move(spec.policy())
         );
     }
-
 
 private:
     environment::SimEnvironment<PhysicsEngineType> _env;

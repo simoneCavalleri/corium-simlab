@@ -171,7 +171,6 @@ void SimLabApp::setScene(scene::SimScene scene) noexcept
 void SimLabApp::resetEnvironment() noexcept
 {
     _simStepCount = 0;
-    _physicsEngine.reset();
 }
 
 bool SimLabApp::loadSceneMesh(const std::string& filePath)
@@ -199,8 +198,6 @@ void SimLabApp::onRender(double deltaTime)
 
     if (_stepCallback) {
         _stepCallback(*this, dt);
-    } else if (_scene) {
-        _physicsEngine.step(*_scene, dt);
     }
     if (_scene) {
         _jointKinematics.updateKinematics(*_scene, dt);
