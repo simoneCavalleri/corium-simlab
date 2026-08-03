@@ -47,6 +47,16 @@ private:
 
     WGPUBindGroupLayout _computeBindGroupLayout = nullptr;
     WGPUComputePipeline _computePipeline = nullptr;
+
+    WGPUBuffer _rayBuf = nullptr;
+    WGPUBuffer _aabbBuf = nullptr;
+    WGPUBuffer _distBuf = nullptr;
+    WGPUBuffer _stagingBuf = nullptr;
+    WGPUBindGroup _bindGroup = nullptr;
+
+    uint64_t _rayCap = 0;
+    uint64_t _aabbCap = 0;
+    uint64_t _distCap = 0;
     bool _initialized = false;
 };
 

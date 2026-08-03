@@ -158,8 +158,15 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
 void WebGpuComputePipeline::shutdown() noexcept
 {
+    if (_bindGroup) safeRelease<WGPUBindGroup, wgpuBindGroupRelease>(_bindGroup);
+    if (_rayBuf) safeDestroyAndRelease<WGPUBuffer, wgpuBufferDestroy, wgpuBufferRelease>(_rayBuf);
+    if (_aabbBuf) safeDestroyAndRelease<WGPUBuffer, wgpuBufferDestroy, wgpuBufferRelease>(_aabbBuf);
+    if (_distBuf) safeDestroyAndRelease<WGPUBuffer, wgpuBufferDestroy, wgpuBufferRelease>(_distBuf);
+    if (_stagingBuf) safeDestroyAndRelease<WGPUBuffer, wgpuBufferDestroy, wgpuBufferRelease>(_stagingBuf);
+
     safeRelease<WGPUComputePipeline, wgpuComputePipelineRelease>(_computePipeline);
     safeRelease<WGPUBindGroupLayout, wgpuBindGroupLayoutRelease>(_computeBindGroupLayout);
+    _rayCap = _aabbCap = _distCap = 0;
     _initialized = false;
 }
 
@@ -219,53 +226,84 @@ bool WebGpuComputePipeline::computeLidarRaycast(
     uint64_t aabbBufferSize = gpuAabbs.size() * sizeof(GpuAABB);
     uint64_t distBufferSize = numRays * sizeof(float);
 
-    WGPUBufferDescriptor bufDesc{};
-    bufDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
+    bool needRebind = false;
 
-    bufDesc.size = rayBufferSize;
-    WGPUBuffer rayBuf = wgpuDeviceCreateBuffer(device, &bufDesc);
-    wgpuQueueWriteBuffer(queue, rayBuf, 0, gpuRays.data(), rayBufferSize);
+    // 1. Manage persistent Ray Storage Buffer
+    if (!_rayBuf || _rayCap < rayBufferSize) {
+        if (_rayBuf) safeDestroyAndRelease<WGPUBuffer, wgpuBufferDestroy, wgpuBufferRelease>(_rayBuf);
+        _rayCap = std::max(rayBufferSize, _rayCap * 2);
+        WGPUBufferDescriptor bufDesc{};
+        bufDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
+        bufDesc.size = _rayCap;
+        _rayBuf = wgpuDeviceCreateBuffer(device, &bufDesc);
+        needRebind = true;
+    }
+    wgpuQueueWriteBuffer(queue, _rayBuf, 0, gpuRays.data(), rayBufferSize);
 
-    bufDesc.size = aabbBufferSize;
-    WGPUBuffer aabbBuf = wgpuDeviceCreateBuffer(device, &bufDesc);
-    wgpuQueueWriteBuffer(queue, aabbBuf, 0, gpuAabbs.data(), aabbBufferSize);
+    // 2. Manage persistent AABB Storage Buffer
+    if (!_aabbBuf || _aabbCap < aabbBufferSize) {
+        if (_aabbBuf) safeDestroyAndRelease<WGPUBuffer, wgpuBufferDestroy, wgpuBufferRelease>(_aabbBuf);
+        _aabbCap = std::max(aabbBufferSize, _aabbCap * 2);
+        WGPUBufferDescriptor bufDesc{};
+        bufDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
+        bufDesc.size = _aabbCap;
+        _aabbBuf = wgpuDeviceCreateBuffer(device, &bufDesc);
+        needRebind = true;
+    }
+    wgpuQueueWriteBuffer(queue, _aabbBuf, 0, gpuAabbs.data(), aabbBufferSize);
 
-    bufDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst;
-    bufDesc.size = distBufferSize;
-    WGPUBuffer distBuf = wgpuDeviceCreateBuffer(device, &bufDesc);
+    // 3. Manage persistent Output & Staging Storage Buffers
+    if (!_distBuf || _distCap < distBufferSize) {
+        if (_distBuf) safeDestroyAndRelease<WGPUBuffer, wgpuBufferDestroy, wgpuBufferRelease>(_distBuf);
+        if (_stagingBuf) safeDestroyAndRelease<WGPUBuffer, wgpuBufferDestroy, wgpuBufferRelease>(_stagingBuf);
 
-    bufDesc.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
-    bufDesc.size = distBufferSize;
-    WGPUBuffer stagingBuf = wgpuDeviceCreateBuffer(device, &bufDesc);
+        _distCap = std::max(distBufferSize, _distCap * 2);
+        WGPUBufferDescriptor bufDesc{};
+        bufDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst;
+        bufDesc.size = _distCap;
+        _distBuf = wgpuDeviceCreateBuffer(device, &bufDesc);
 
-    WGPUBindGroupEntry entries[3]{};
-    entries[0].binding = 0; entries[0].buffer = rayBuf; entries[0].size = rayBufferSize;
-    entries[1].binding = 1; entries[1].buffer = aabbBuf; entries[1].size = aabbBufferSize;
-    entries[2].binding = 2; entries[2].buffer = distBuf; entries[2].size = distBufferSize;
+        bufDesc.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+        bufDesc.size = _distCap;
+        _stagingBuf = wgpuDeviceCreateBuffer(device, &bufDesc);
+        needRebind = true;
+    }
 
-    WGPUBindGroupDescriptor bgDesc{};
-    bgDesc.layout = _computeBindGroupLayout;
-    bgDesc.entryCount = 3;
-    bgDesc.entries = entries;
-    WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device, &bgDesc);
+    // 4. Recreate BindGroup if buffers expanded
+    if (needRebind || !_bindGroup) {
+        if (_bindGroup) safeRelease<WGPUBindGroup, wgpuBindGroupRelease>(_bindGroup);
 
+        WGPUBindGroupEntry entries[3]{};
+        entries[0].binding = 0; entries[0].buffer = _rayBuf; entries[0].size = _rayCap;
+        entries[1].binding = 1; entries[1].buffer = _aabbBuf; entries[1].size = _aabbCap;
+        entries[2].binding = 2; entries[2].buffer = _distBuf; entries[2].size = _distCap;
+
+        WGPUBindGroupDescriptor bgDesc{};
+        bgDesc.layout = _computeBindGroupLayout;
+        bgDesc.entryCount = 3;
+        bgDesc.entries = entries;
+        _bindGroup = wgpuDeviceCreateBindGroup(device, &bgDesc);
+    }
+
+    // 5. Submit GPU Compute Pass
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, nullptr);
     WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, nullptr);
     wgpuComputePassEncoderSetPipeline(pass, _computePipeline);
-    wgpuComputePassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+    wgpuComputePassEncoderSetBindGroup(pass, 0, _bindGroup, 0, nullptr);
 
     uint32_t workgroups = (numRays + 63) / 64;
     wgpuComputePassEncoderDispatchWorkgroups(pass, workgroups, 1, 1);
     wgpuComputePassEncoderEnd(pass);
     wgpuComputePassEncoderRelease(pass);
 
-    wgpuCommandEncoderCopyBufferToBuffer(encoder, distBuf, 0, stagingBuf, 0, distBufferSize);
+    wgpuCommandEncoderCopyBufferToBuffer(encoder, _distBuf, 0, _stagingBuf, 0, distBufferSize);
 
     WGPUCommandBuffer cmdBuf = wgpuCommandEncoderFinish(encoder, nullptr);
     wgpuQueueSubmit(queue, 1, &cmdBuf);
     wgpuCommandBufferRelease(cmdBuf);
     wgpuCommandEncoderRelease(encoder);
 
+    // 6. Asynchronous Map Readback
     struct MapContext { bool done = false; } mapCtx;
     auto mapCallback = [](WGPUBufferMapAsyncStatus status, void* userdata) {
         auto* ctx = static_cast<MapContext*>(userdata);
@@ -274,22 +312,16 @@ bool WebGpuComputePipeline::computeLidarRaycast(
         }
     };
 
-    wgpuBufferMapAsync(stagingBuf, WGPUMapMode_Read, 0, distBufferSize, mapCallback, &mapCtx);
+    wgpuBufferMapAsync(_stagingBuf, WGPUMapMode_Read, 0, distBufferSize, mapCallback, &mapCtx);
     while (!mapCtx.done) {
         wgpuDevicePoll(device, true, nullptr);
     }
 
-    const float* mapped = static_cast<const float*>(wgpuBufferGetConstMappedRange(stagingBuf, 0, distBufferSize));
+    const float* mapped = static_cast<const float*>(wgpuBufferGetConstMappedRange(_stagingBuf, 0, distBufferSize));
     if (mapped) {
         std::copy(mapped, mapped + numRays, outDistances.begin());
-        wgpuBufferUnmap(stagingBuf);
+        wgpuBufferUnmap(_stagingBuf);
     }
-
-    wgpuBindGroupRelease(bindGroup);
-    wgpuBufferDestroy(rayBuf); wgpuBufferRelease(rayBuf);
-    wgpuBufferDestroy(aabbBuf); wgpuBufferRelease(aabbBuf);
-    wgpuBufferDestroy(distBuf); wgpuBufferRelease(distBuf);
-    wgpuBufferDestroy(stagingBuf); wgpuBufferRelease(stagingBuf);
 
     return true;
 }
@@ -298,10 +330,24 @@ void WebGpuComputePipeline::moveFrom(WebGpuComputePipeline&& rhs) noexcept
 {
     _computeBindGroupLayout = rhs._computeBindGroupLayout;
     _computePipeline = rhs._computePipeline;
+    _rayBuf = rhs._rayBuf;
+    _aabbBuf = rhs._aabbBuf;
+    _distBuf = rhs._distBuf;
+    _stagingBuf = rhs._stagingBuf;
+    _bindGroup = rhs._bindGroup;
+    _rayCap = rhs._rayCap;
+    _aabbCap = rhs._aabbCap;
+    _distCap = rhs._distCap;
     _initialized = rhs._initialized;
 
     rhs._computeBindGroupLayout = nullptr;
     rhs._computePipeline = nullptr;
+    rhs._rayBuf = nullptr;
+    rhs._aabbBuf = nullptr;
+    rhs._distBuf = nullptr;
+    rhs._stagingBuf = nullptr;
+    rhs._bindGroup = nullptr;
+    rhs._rayCap = rhs._aabbCap = rhs._distCap = 0;
     rhs._initialized = false;
 }
 
